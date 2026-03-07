@@ -1,0 +1,60 @@
+---
+branches:
+  - main
+
+preset: "conventionalcommits"
+tagFormat: "v${version}"
+
+plugins:
+  - - "@semantic-release/commit-analyzer"
+    - preset: conventionalcommits
+  - - "@semantic-release/release-notes-generator"
+    - preset: conventionalcommits
+  - - "@semantic-release/git"
+  - - "@semantic-release/github"
+    # Defaults to disable unnededed events which can trigger GH ratelimits
+    - failComment: false
+      failTitle: false
+      labels: false
+      releasedLabels: false
+      successComment: false
+  - - "semantic-release-major-tag"
+
+generateNotes:
+  - path: "@semantic-release/release-notes-generator"
+    writerOpts:
+      commitsSort:
+        - subject
+        - scope
+    presetConfig:
+      types:
+        - type: build
+          section: Build System
+          hidden: false
+        - type: chore
+          section: Miscellaneous
+          hidden: false
+        - type: ci
+          section: Continuous Integration
+          hidden: false
+        - type: docs
+          section: Documentation
+          hidden: false
+        - type: feat
+          section: Features
+          hidden: false
+        - type: fix
+          section: Bug Fixes
+          hidden: false
+        - type: perf
+          section: Performance Improvements
+          hidden: false
+        - type: refactor
+          section: Code Refactoring
+          hidden: false
+        - type: style
+          section: Styles
+          hidden: false
+        - type: test
+          section: Tests
+          hidden: false

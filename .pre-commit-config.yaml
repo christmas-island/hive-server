@@ -1,0 +1,48 @@
+---
+repos:
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.22.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional"]
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        args: ["--no-error-on-unmatched-pattern"]
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.13.0
+    hooks:
+      - id: zizmor
+        args: ["--min-severity", "high", "--min-confidence", "medium"]
+  - repo: https://github.com/tekwizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      - id: go-mod-tidy
+  # TODO(shakefu): Uncomment this when we get support for 1.25
+  # - repo: https://github.com/golangci/golangci-lint
+  #   rev: v2.4.0
+  #   hooks:
+  #     # Full is needed for checks that scan the entire codebase, i.e. go vet
+  #     - id: golangci-lint-full
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-json
+      - id: check-yaml
+        exclude: ^k8s/
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
+    hooks:
+      - id: markdownlint-cli2
+        args: ["--fix"]
+        files: ".*\\.(md|mdc)$"
+        exclude: "^(k8s/.*|WARP\\.md|\\.claude/.*|CLAUDE\\.md)$"
+        additional_dependencies: ["markdownlint-cli2"]

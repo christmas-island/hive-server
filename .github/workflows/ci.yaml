@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  workflow_call:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.event.number || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+    name: Release Notes
+    runs-on: ubuntu-latest
+    # TODO(shakefu): Make this work again, for now we skip it
+    if: false && github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+      - name: Generate notes
+        id: notes
+        uses: open-turo/actions-release/lint-release-notes@94161cffd7a38c20a6e685406996b1cdb259f0d5 # v5
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          extra-plugins: |
+            conventional-changelog-conventionalcommits
+            semantic-release-major-tag
+            @semantic-release/changelog
+            @semantic-release/git
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          cache: pip
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: ".go-version"
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: ".go-version"
+      - run: go test -v ./...

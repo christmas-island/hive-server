@@ -1,0 +1,42 @@
+version: "2"
+
+linters:
+  # Default set of linters.
+  # The value can be: `standard`, `all`, `none`, or `fast`.
+  default: none
+
+  # TODO(jmreicha): Figure out which ones we want to enable.
+  enable:
+    # - errcheck # unchecked errors
+    # - gosec # security checks
+    - govet # performance checks
+    # - revive # general checks
+    # - staticcheck # unused code
+    # - unused # unused code
+
+  exclusions:
+    rules:
+      # Skip wire and storage packages because the protocol relies on struct ordering
+      - path: "(pkg/wire/|pkg/storage)"
+        linters:
+          - govet
+        text: "fieldalignment"
+      # Only disable unsafeptr check for the internal/mmap package
+      - path: internal/mmap
+        linters:
+          - govet
+        text: "unsafeptr"
+
+  settings:
+    govet:
+      enable:
+        - fieldalignment
+
+formatters:
+  enable:
+    - gofmt # formatting
+    - goimports # import management
+
+issues:
+  # The pre-commit hook sets this to true.
+  fix: false

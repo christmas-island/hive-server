@@ -1,0 +1,66 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  namespace: app
+  labels:
+    app: app
+    version: v0.31.0
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/auth-signin: https://proxy.pftw.net/oauth2/start?rd=https://app.pftw.net$escaped_request_uri
+    nginx.ingress.kubernetes.io/auth-url: http://oauth2-proxy.infrastructure.svc.cluster.local/oauth2/auth
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - app.pftw.net # Replace with your actual domain
+      secretName: app-tls
+  rules:
+    - host: app.pftw.net # Replace with your actual domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app-http
+                port:
+                  number: 9999
+---
+# Alternative Ingress for DigitalOcean LoadBalancer with SSL
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-do-ingress
+  namespace: app
+  labels:
+    app: app
+    version: v0.31.0
+  annotations:
+    kubernetes.digitalocean.com/load-balancer-id: "your-load-balancer-id" # Replace with actual LB ID
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - app.pftw.net # Replace with your actual domain
+      secretName: app-tls-do
+  rules:
+    - host: app.pftw.net # Replace with your actual domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app-http
+                port:
+                  number: 9999

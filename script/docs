@@ -1,0 +1,19 @@
+#!/bin/sh
+
+if ! command -v pkgsite >/dev/null; then
+    go install golang.org/x/pkgsite/cmd/pkgsite@latest
+fi
+
+wait_to_open() {
+    sleep 2
+    echo "Opening docs in browser..."
+    open http://localhost:8080
+}
+
+if command -v open >/dev/null; then
+    wait_to_open &
+fi
+
+echo "Building docs..."
+
+exec pkgsite
