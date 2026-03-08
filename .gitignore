@@ -30,7 +30,6 @@ dist/
 bin/
 
 # Ignore the local storage directory
-finagle-storage/
 
 # Ignore test storage directory
 test-storage/

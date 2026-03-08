@@ -47,7 +47,7 @@ archives:
 # TODO(shakefu): Add multi-platform builds
 dockers:
   - image_templates:
-      - "ghcr.io/christmas-island/hive-server:{{ .Version }}"
+      - "ghcr.io/christmas-island/go-scaffold:{{ .Version }}"
     use: buildx
     dockerfile: Dockerfile
     build_flag_templates:
