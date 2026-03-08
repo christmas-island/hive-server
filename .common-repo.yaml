@@ -4,3 +4,11 @@
 - repo:
     url: https://github.com/christmas-island/go-scaffold
     ref: main
+
+- include:
+    patterns:
+      - "**/*"
+
+- exclude:
+    patterns:
+      - ".goreleaser.yaml"
