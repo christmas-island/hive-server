@@ -1,14 +1,24 @@
 # CLAUDE.md
 
-Go service scaffold for christmas-island projects.
+hive-server: REST API for cross-agent memory and task coordination.
 
 ## Structure
 
-- `cmd/app/` — CLI entrypoint (cobra)
-- `pkg/` — Public packages
-- `internal/` — Private packages (log)
+- `cmd/app/` — CLI entrypoint (cobra), HTTP server setup
+- `internal/handlers/` — HTTP handlers, chi router, auth middleware
+- `internal/store/` — SQLite persistence, migrations
+- `internal/log/` — Logging
 - `k8s/` — Kubernetes manifests
 - `.github/` — CI/CD workflows
+
+## Key Patterns
+
+- Auth: Bearer token via `HIVE_TOKEN` env var. If empty, auth is disabled (local dev).
+- Agent ID: `X-Agent-ID` header, injected into context by middleware.
+- API prefix: `/api/v1/`
+- Health probes: `/health`, `/ready` (outside API prefix, no auth)
+- Router: chi v5
+- Store interface allows mocking in tests
 
 ## Conventions
 
