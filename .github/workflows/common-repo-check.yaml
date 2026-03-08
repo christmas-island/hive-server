@@ -1,0 +1,43 @@
+name: common-repo check
+
+on:
+  schedule:
+    # Run daily at 08:00 UTC
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Check for scaffold updates
+    runs-on: ubuntu-latest
+    # Only run if .common-repo.yaml exists (skip for the template repo itself)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for .common-repo.yaml
+        id: has-config
+        run: |
+          if [ -f .common-repo.yaml ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No .common-repo.yaml found — this is likely the template repo itself. Skipping."
+          fi
+
+      - name: Install common-repo
+        if: steps.has-config.outputs.exists == 'true'
+        run: |
+          curl -sL "https://github.com/common-repo/common-repo/releases/latest/download/common-repo-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar xz -C /usr/local/bin
+          common-repo --version
+
+      - name: Check for updates
+        if: steps.has-config.outputs.exists == 'true'
+        run: common-repo check --updates
+
+      - name: Show diff
+        if: steps.has-config.outputs.exists == 'true'
+        run: |
+          common-repo diff --summary || true
+          echo "---"
+          common-repo diff || true
