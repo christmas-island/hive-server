@@ -35,7 +35,8 @@ repos:
     hooks:
       - id: check-json
       - id: check-yaml
-        exclude: ^k8s/
+        args: ["--allow-multiple-documents"]
+        exclude: ^(k8s/|examples/k8s/)
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/DavidAnson/markdownlint-cli2

@@ -70,7 +70,7 @@ func TestTaskGet(t *testing.T) {
 func TestTaskGet_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.GetTask(context.Background(), "no-such-id")
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -153,7 +153,7 @@ func TestTaskDelete(t *testing.T) {
 		t.Fatalf("DeleteTask: %v", err)
 	}
 	_, err := s.GetTask(ctx, task.ID)
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -161,7 +161,7 @@ func TestTaskDelete(t *testing.T) {
 func TestTaskDelete_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	err := s.DeleteTask(context.Background(), "no-such-id")
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -261,7 +261,7 @@ func TestUpdateTask_InvalidTransition(t *testing.T) {
 	task := makeTask(s, t, "invalid transition")
 	done := model.TaskStatusDone
 	_, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Status: &done})
-	if err != store.ErrInvalidTransition {
+	if err != model.ErrInvalidTransition {
 		t.Errorf("expected ErrInvalidTransition, got %v", err)
 	}
 }
@@ -311,7 +311,7 @@ func TestUpdateTask_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	note := "hi"
 	_, err := s.UpdateTask(context.Background(), "ghost", model.TaskUpdate{Note: &note})
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }

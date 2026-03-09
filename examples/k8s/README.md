@@ -10,14 +10,16 @@ This directory contains example Kubernetes manifests for deploying hive-server w
 ## Quick Start
 
 1. **Update the secret** with your actual CockroachDB connection string:
+
    ```bash
    # Base64 encode your DATABASE_URL
    echo -n "postgresql://hive_user:password@cockroachdb:26257/hive?sslmode=require" | base64
-   
+
    # Update secret.yaml with the encoded value
    ```
 
 2. **Apply the manifests**:
+
    ```bash
    kubectl apply -f secret.yaml
    kubectl apply -f deployment.yaml
