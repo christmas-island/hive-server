@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# script/bootstrap — Verify system dependencies and install dev tools.
+# Idempotent: safe to re-run at any time.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "==> Checking Go..."
+if ! command -v go &>/dev/null; then
+  echo "ERROR: Go is not installed. Install from https://go.dev/dl/" >&2
+  exit 1
+fi
+
+REQUIRED_GO=""
+if [ -f .go-version ]; then
+  REQUIRED_GO=$(cat .go-version | tr -d '[:space:]')
+fi
+
+if [ -n "$REQUIRED_GO" ]; then
+  CURRENT_GO=$(go version | grep -oE 'go[0-9]+\.[0-9]+' | sed 's/go//')
+  if [ "$CURRENT_GO" != "$REQUIRED_GO" ]; then
+    echo "WARNING: Go $REQUIRED_GO expected (from .go-version), found $CURRENT_GO"
+  else
+    echo "    Go $CURRENT_GO ✓"
+  fi
+else
+  echo "    $(go version) ✓"
+fi
+
+echo "==> Checking golangci-lint..."
+if ! command -v golangci-lint &>/dev/null; then
+  echo "    Installing golangci-lint..."
+  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+else
+  echo "    golangci-lint ✓"
+fi
+
+echo "==> Checking cockroach (optional, for integration tests)..."
+if ! command -v cockroach &>/dev/null; then
+  echo "    cockroach not found — integration tests won't run locally"
+  echo "    Install: https://www.cockroachlabs.com/docs/releases/"
+else
+  echo "    cockroach ✓"
+fi
+
+echo "==> Bootstrap complete."

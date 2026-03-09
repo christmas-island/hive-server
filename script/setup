@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# script/setup — Configure the project for local development.
+# Run after script/bootstrap. Idempotent.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "==> Downloading Go modules..."
+go mod download
+
+echo "==> Verifying module checksums..."
+go mod verify
+
+echo "==> Creating .env template (if missing)..."
+if [ ! -f .env ]; then
+  cat > .env <<'ENVEOF'
+# hive-server local development environment
+# Copy to .env and customize as needed.
+
+# SQLite database path (default: in-memory)
+# HIVE_DB_PATH=./data/hive.db
+
+# Bearer token for API auth (empty = auth disabled)
+# HIVE_TOKEN=
+
+# Server bind address (default: :8080)
+# PORT=8080
+ENVEOF
+  echo "    Created .env template"
+else
+  echo "    .env already exists ✓"
+fi
+
+echo "==> Building..."
+go build ./...
+
+echo "==> Setup complete. Run 'script/test' to verify."

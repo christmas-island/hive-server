@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# script/test — Run unit tests (no external services required).
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "==> Running unit tests..."
+go test -race -count=1 ./...
+
+echo "==> Tests passed."
