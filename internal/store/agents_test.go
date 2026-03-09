@@ -144,7 +144,7 @@ func TestAgentOfflineThreshold(t *testing.T) {
 	// Set last_heartbeat to 10 minutes ago.
 	staleTime := time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339Nano)
 	_, err = s.DB().ExecContext(ctx,
-		`UPDATE agents SET last_heartbeat = ? WHERE id = 'stale-agent'`, staleTime)
+		`UPDATE agents SET last_heartbeat = $1 WHERE id = 'stale-agent'`, staleTime)
 	if err != nil {
 		t.Fatalf("update heartbeat: %v", err)
 	}

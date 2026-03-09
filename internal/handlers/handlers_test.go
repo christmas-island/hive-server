@@ -6,26 +6,51 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+	"os"
 	"testing"
 
 	"github.com/christmas-island/hive-server/internal/handlers"
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
-// newTestServer creates an httptest server backed by a real SQLite store.
+// testDatabaseURL returns the DATABASE_URL for handler tests.
+// Tests are skipped if the env var is not set (no live DB required in CI without CRDB).
+func testDatabaseURL(t *testing.T) string {
+	t.Helper()
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		t.Skip("DATABASE_URL not set; skipping handler integration test")
+	}
+	return url
+}
+
+// newTestServer creates an httptest server backed by a real CockroachDB/PostgreSQL store.
 func newTestServer(t *testing.T, token string) *httptest.Server {
 	t.Helper()
-	dir := t.TempDir()
-	s, err := store.New(filepath.Join(dir, "test.db"))
+	url := testDatabaseURL(t)
+	s, err := store.New(url)
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() {
+		cleanTestDB(t, s)
+		_ = s.Close()
+	})
 	h := handlers.New(s, token)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// cleanTestDB removes all rows inserted during a test to keep the DB clean between runs.
+func cleanTestDB(t *testing.T, s *store.Store) {
+	t.Helper()
+	db := s.DB()
+	for _, tbl := range []string{"task_notes", "tasks", "memory", "agents"} {
+		if _, err := db.Exec("DELETE FROM " + tbl); err != nil {
+			t.Logf("cleanup %s: %v", tbl, err)
+		}
+	}
 }
 
 // request is a helper to make HTTP requests to the test server.

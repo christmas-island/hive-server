@@ -331,7 +331,7 @@ func TestTaskNotesCascadeDelete(t *testing.T) {
 	// Verify notes are gone via DB query.
 	db := s.DB()
 	var count int
-	_ = db.QueryRow(`SELECT COUNT(*) FROM task_notes WHERE task_id = ?`, task.ID).Scan(&count)
+	_ = db.QueryRow(`SELECT COUNT(*) FROM task_notes WHERE task_id = $1`, task.ID).Scan(&count)
 	if count != 0 {
 		t.Errorf("expected 0 notes after cascade delete, got %d", count)
 	}

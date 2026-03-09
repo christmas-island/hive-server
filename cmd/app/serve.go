@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	defaultDBPath = "/data/hive.db"
-	defaultPort   = "8080"
+	defaultDatabaseURL = "postgresql://root@localhost:26257/hive?sslmode=disable"
+	defaultPort        = "8080"
 )
 
 // Serve starts the HTTP server.
@@ -30,6 +30,7 @@ func Serve() *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.StringP("bind", "b", "", "The bind address for the HTTP server (overrides PORT env var).")
+	flags.String("database-url", "", "PostgreSQL/CockroachDB connection URL (overrides DATABASE_URL env var).")
 
 	return cmd
 }
@@ -45,16 +46,21 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		bind = net.JoinHostPort("0.0.0.0", port)
 	}
 
-	// Read config from environment.
-	token := os.Getenv("HIVE_TOKEN")
-	dbPath := os.Getenv("HIVE_DB_PATH")
-	if dbPath == "" {
-		dbPath = defaultDBPath
+	// Resolve database URL: flag > DATABASE_URL env > default.
+	dbURL, _ := cmd.Flags().GetString("database-url")
+	if dbURL == "" {
+		dbURL = os.Getenv("DATABASE_URL")
+	}
+	if dbURL == "" {
+		dbURL = defaultDatabaseURL
 	}
 
-	// Open SQLite store.
-	log.Info("opening database at ", dbPath)
-	s, err := store.New(dbPath)
+	// Read auth token from environment.
+	token := os.Getenv("HIVE_TOKEN")
+
+	// Open CockroachDB/PostgreSQL store.
+	log.Info("connecting to database: ", dbURL)
+	s, err := store.New(dbURL)
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
