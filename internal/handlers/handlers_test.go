@@ -117,3 +117,37 @@ func TestAuth_NoTokenConfigured(t *testing.T) {
 	}
 	resp.Body.Close()
 }
+
+// TestHealthz verifies that GET /healthz returns 200 OK with database connectivity.
+func TestHealthz(t *testing.T) {
+	srv := newTestServer(t, "secret")
+	resp := request(t, srv, http.MethodGet, "/healthz", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	
+	var body map[string]string
+	decodeJSON(t, resp, &body)
+	if body["status"] != "healthy" {
+		t.Errorf("status = %q, want %q", body["status"], "healthy")
+	}
+}
+
+// TestHealthz_MockStore verifies that /healthz works with the mock store.
+func TestHealthz_MockStore(t *testing.T) {
+	store := newMockStore()
+	h := handlers.New(store, "")
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+
+	resp := request(t, srv, http.MethodGet, "/healthz", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	
+	var body map[string]string
+	decodeJSON(t, resp, &body)
+	if body["status"] != "healthy" {
+		t.Errorf("status = %q, want %q", body["status"], "healthy")
+	}
+}

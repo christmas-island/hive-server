@@ -46,6 +46,11 @@ func (s *Store) Close() error { return s.db.Close() }
 // DB returns the underlying *sql.DB (useful for testing).
 func (s *Store) DB() *sql.DB { return s.db }
 
+// Ping verifies database connectivity.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 // migrate creates all required tables if they don't exist.
 func (s *Store) migrate(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, schema)

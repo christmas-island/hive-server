@@ -28,3 +28,14 @@ func TestReady(t *testing.T) {
 		t.Errorf("GET /ready: want 200, got %d (body: %s)", status, body)
 	}
 }
+
+// TestHealthz verifies that GET /healthz returns 200 OK with database connectivity.
+func TestHealthz(t *testing.T) {
+	status, body, err := cli.do("GET", "/healthz", nil, withNoAuth())
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("GET /healthz: want 200, got %d (body: %s)", status, body)
+	}
+}

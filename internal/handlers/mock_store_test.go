@@ -299,6 +299,13 @@ func (m *mockStore) ListAgents(_ context.Context) ([]*store.Agent, error) {
 	return result, nil
 }
 
+// --- Health ---
+
+func (m *mockStore) Ping(_ context.Context) error {
+	// Mock implementation always returns success for testing.
+	return nil
+}
+
 // --- Helpers ---
 
 func copyMemoryEntry(e *store.MemoryEntry) *store.MemoryEntry {
