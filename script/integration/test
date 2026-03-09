@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
-# script/integration/test — Run integration tests with ephemeral CockroachDB.
-# Requires: cockroach binary (see script/bootstrap)
-# Blocked on: CockroachDB migration (#12) — currently runs unit tests as fallback.
+# script/integration/test — Run integration tests against CockroachDB.
+#
+# If DATABASE_URL is set, tests use that database.
+# Otherwise, cockroach-go/v2/testserver auto-downloads and starts an
+# ephemeral single-node CockroachDB cluster (~200MB first-run download,
+# cached afterwards).
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-if ! command -v cockroach &>/dev/null; then
-  echo "ERROR: cockroach binary not found. Install from https://www.cockroachlabs.com/docs/releases/" >&2
-  echo "       Falling back to unit tests..." >&2
-  exec script/test
+echo "==> Running integration tests..."
+if [ -n "${DATABASE_URL:-}" ]; then
+  echo "    Using DATABASE_URL from environment"
+else
+  echo "    Ephemeral CockroachDB will be started via testserver"
 fi
 
-# TODO: Once #12 (CRDB migration) lands, this will:
-# 1. Start ephemeral CockroachDB via cockroach-go/v2/testserver
-# 2. Run integration tests with -tags integration
-# 3. Tear down on exit
-#
-# For now, run all tests (unit + any tagged integration).
-echo "==> Running integration tests..."
-go test -race -count=1 -tags integration ./...
+go test -race -count=1 -tags integration -timeout 300s ./...
 
 echo "==> Integration tests passed."
