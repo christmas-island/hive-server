@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-http
+  name: hive
   namespace: app
   labels:
-    app: app-http
+    app: hive
     version: v0.31.0
 spec:
   replicas: 3
@@ -15,22 +15,22 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      app: app-http
+      app: hive
   template:
     metadata:
       labels:
-        app: app-http
+        app: hive
         version: v0.31.0
     spec:
-      serviceAccountName: app
+      serviceAccountName: hive
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
       containers:
-        - name: app
-          image: registry.digitalocean.com/christmas-island/app:v0.31.0
+        - name: hive
+          image: ghcr.io/christmas-island/hive-server:v0.31.0
           imagePullPolicy: IfNotPresent
           command: ["/usr/bin/app"]
           args: ["serve", "http"]
@@ -103,5 +103,5 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - app-http
+                        - hive
                 topologyKey: kubernetes.io/hostname

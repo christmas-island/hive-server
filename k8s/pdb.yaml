@@ -1,13 +1,13 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: app-pdb
+  name: hive-pdb
   namespace: app
   labels:
-    app: app-http
+    app: hive
     version: v0.22.0
 spec:
   minAvailable: 2
   selector:
     matchLabels:
-      app: app-http
+      app: hive

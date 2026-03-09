@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 metadata:
-  name: app-http
+  name: hive
 
 resources:
   - serviceaccount.yaml
@@ -13,10 +13,10 @@ resources:
   - ingress.yaml
 
 commonLabels:
-  app: app-http
+  app: hive
   version: v0.31.0
   managed-by: kustomize
 
 images:
-  - name: registry.digitalocean.com/christmas-island/app
+  - name: ghcr.io/christmas-island/hive-server
     newTag: v0.31.0

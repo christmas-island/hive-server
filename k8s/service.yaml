@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: app-http-external
+  name: hive-external
   namespace: app
   labels:
-    app: app
+    app: hive
     version: v0.31.0
   annotations:
-    service.beta.kubernetes.io/do-loadbalancer-name: "app-lb"
+    service.beta.kubernetes.io/do-loadbalancer-name: "hive-lb"
     service.beta.kubernetes.io/do-loadbalancer-algorithm: "round_robin"
     service.beta.kubernetes.io/do-loadbalancer-healthcheck-protocol: "http"
     service.beta.kubernetes.io/do-loadbalancer-healthcheck-path: "/ping"
@@ -20,16 +20,16 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    app: app-http
+    app: hive
   sessionAffinity: None
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: app-http
+  name: hive
   namespace: app
   labels:
-    app: app-http
+    app: hive
     version: v0.31.0
 spec:
   type: ClusterIP
@@ -39,4 +39,4 @@ spec:
       targetPort: http
       protocol: TCP
   selector:
-    app: app-http
+    app: hive

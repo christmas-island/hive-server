@@ -1,16 +1,16 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: app-hpa
+  name: hive-hpa
   namespace: app
   labels:
-    app: app-http
+    app: hive
     version: v0.31.0
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: app-http
+    name: hive
   minReplicas: 1
   maxReplicas: 1
   metrics:
