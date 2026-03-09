@@ -31,6 +31,8 @@ type Store interface {
 	Heartbeat(ctx context.Context, id string, capabilities []string, status store.AgentStatus) (*store.Agent, error)
 	GetAgent(ctx context.Context, id string) (*store.Agent, error)
 	ListAgents(ctx context.Context) ([]*store.Agent, error)
+	// Health
+	Ping(ctx context.Context) error
 }
 
 // API holds dependencies for all handlers.
@@ -54,6 +56,7 @@ func (a *API) routes() http.Handler {
 	// Health endpoints — no auth required, intentionally outside the API group.
 	r.Get("/health", handleHealth)
 	r.Get("/ready", handleReady)
+	r.Get("/healthz", a.handleHealthz)
 
 	// Authenticated API group: auth middleware wraps all Huma operations and
 	// the auto-generated OpenAPI docs/schema endpoints.
@@ -117,4 +120,22 @@ func handleReady(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+}
+
+// handleHealthz handles GET /healthz with database connectivity check.
+func (a *API) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
+	if err := a.store.Ping(ctx); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "unavailable",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
