@@ -31,8 +31,6 @@ type Store interface {
 	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error)
 	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
-	// Health
-	Ping(ctx context.Context) error
 }
 
 // API holds dependencies for all handlers.
@@ -52,11 +50,6 @@ func (a *API) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
-
-	// Health endpoints — no auth required, intentionally outside the API group.
-	r.Get("/health", handleHealth)
-	r.Get("/ready", handleReady)
-	r.Get("/healthz", a.handleHealthz)
 
 	// Authenticated API group: auth middleware wraps all Huma operations and
 	// the auto-generated OpenAPI docs/schema endpoints.
@@ -106,36 +99,4 @@ func (a *API) authMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// handleHealth handles GET /health.
-func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-// handleReady handles GET /ready.
-func handleReady(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
-}
-
-// handleHealthz handles GET /healthz with database connectivity check.
-func (a *API) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	ctx := r.Context()
-	if err := a.store.Ping(ctx); err != nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status": "unavailable",
-			"error":  err.Error(),
-		})
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
