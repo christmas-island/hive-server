@@ -85,8 +85,10 @@ func TestMemoryUpsert_MissingKey(t *testing.T) {
 	srv := newTestServer(t, testToken)
 	resp := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{"value": "v"}, testToken, testAgent)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
+	// Huma validates input before the handler runs; missing/empty required
+	// string fields return 422 Unprocessable Entity.
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422", resp.StatusCode)
 	}
 }
 
@@ -94,8 +96,10 @@ func TestMemoryUpsert_MissingValue(t *testing.T) {
 	srv := newTestServer(t, testToken)
 	resp := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{"key": "k"}, testToken, testAgent)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
+	// Huma validates input before the handler runs; missing/empty required
+	// string fields return 422 Unprocessable Entity.
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422", resp.StatusCode)
 	}
 }
 
@@ -172,8 +176,10 @@ func TestMemoryList_InvalidLimit(t *testing.T) {
 	srv := newTestServer(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/memory?limit=bad", nil, testToken, testAgent)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
+	// Huma validates query parameter types before the handler runs;
+	// a non-integer limit returns 422 Unprocessable Entity.
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422", resp.StatusCode)
 	}
 }
 

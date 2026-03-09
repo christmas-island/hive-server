@@ -50,8 +50,10 @@ func TestTaskCreate_MissingTitle(t *testing.T) {
 		"description": "no title",
 	}, testToken, testAgent)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", resp.StatusCode)
+	// Huma validates input before the handler runs; missing/empty required
+	// string fields return 422 Unprocessable Entity.
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422", resp.StatusCode)
 	}
 }
 
