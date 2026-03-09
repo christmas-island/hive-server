@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# script/server — Start the development server.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Source .env if present
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
+echo "==> Starting hive-server..."
+go run ./cmd/app serve "$@"
