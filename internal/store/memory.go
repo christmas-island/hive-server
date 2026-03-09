@@ -38,6 +38,7 @@ type MemoryFilter struct {
 
 // UpsertMemory creates or updates a memory entry.
 // If version > 0 in entry, it performs an optimistic concurrency check.
+// Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEntry, error) {
 	now := time.Now().UTC()
 	if entry.Tags == nil {
@@ -48,71 +49,67 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 		return nil, fmt.Errorf("marshal tags: %w", err)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
+		// Check if entry exists already.
+		var existing MemoryEntry
+		var tagsRaw, createdStr, updatedStr string
+		err := tx.QueryRowContext(ctx,
+			`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+			entry.Key,
+		).Scan(&existing.Key, &existing.Value, &existing.AgentID, &tagsRaw, &existing.Version, &createdStr, &updatedStr)
+
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			// Insert new entry.
+			createdAt := now
+			if !entry.CreatedAt.IsZero() {
+				createdAt = entry.CreatedAt
+			}
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, 1, $5, $6)`,
+				entry.Key, entry.Value, entry.AgentID, string(tagsJSON),
+				createdAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			)
+			if err != nil {
+				return fmt.Errorf("insert memory: %w", err)
+			}
+			entry.Version = 1
+			entry.CreatedAt = createdAt
+			entry.UpdatedAt = now
+
+		case err == nil:
+			// Parse existing timestamps.
+			if t, err := time.Parse(time.RFC3339Nano, createdStr); err == nil {
+				existing.CreatedAt = t
+			} else if t, err := time.Parse(time.RFC3339, createdStr); err == nil {
+				existing.CreatedAt = t
+			}
+
+			// Optimistic concurrency check.
+			if entry.Version > 0 && existing.Version != entry.Version {
+				return ErrConflict
+			}
+			_, err = tx.ExecContext(ctx,
+				`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4
+                 WHERE key = $5`,
+				entry.Value, entry.AgentID, string(tagsJSON),
+				now.Format(time.RFC3339Nano), entry.Key,
+			)
+			if err != nil {
+				return fmt.Errorf("update memory: %w", err)
+			}
+			entry.Version = existing.Version + 1
+			entry.CreatedAt = existing.CreatedAt
+			entry.UpdatedAt = now
+
+		default:
+			return fmt.Errorf("query memory: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Check if entry exists already.
-	var existing MemoryEntry
-	var tagsRaw, createdStr, updatedStr string
-	err = tx.QueryRowContext(ctx,
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
-		entry.Key,
-	).Scan(&existing.Key, &existing.Value, &existing.AgentID, &tagsRaw, &existing.Version, &createdStr, &updatedStr)
-
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		// Insert new entry.
-		createdAt := now
-		if !entry.CreatedAt.IsZero() {
-			createdAt = entry.CreatedAt
-		}
-		_, err = tx.ExecContext(ctx,
-			`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, 1, $5, $6)`,
-			entry.Key, entry.Value, entry.AgentID, string(tagsJSON),
-			createdAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("insert memory: %w", err)
-		}
-		entry.Version = 1
-		entry.CreatedAt = createdAt
-		entry.UpdatedAt = now
-
-	case err == nil:
-		// Parse existing timestamps.
-		if t, err := time.Parse(time.RFC3339Nano, createdStr); err == nil {
-			existing.CreatedAt = t
-		} else if t, err := time.Parse(time.RFC3339, createdStr); err == nil {
-			existing.CreatedAt = t
-		}
-
-		// Optimistic concurrency check.
-		if entry.Version > 0 && existing.Version != entry.Version {
-			return nil, ErrConflict
-		}
-		_, err = tx.ExecContext(ctx,
-			`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4
-             WHERE key = $5`,
-			entry.Value, entry.AgentID, string(tagsJSON),
-			now.Format(time.RFC3339Nano), entry.Key,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("update memory: %w", err)
-		}
-		entry.Version = existing.Version + 1
-		entry.CreatedAt = existing.CreatedAt
-		entry.UpdatedAt = now
-
-	default:
-		return nil, fmt.Errorf("query memory: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
+		return nil, err
 	}
 	return entry, nil
 }
@@ -177,16 +174,19 @@ func (s *Store) ListMemory(ctx context.Context, f MemoryFilter) ([]*MemoryEntry,
 }
 
 // DeleteMemory removes a memory entry by key.
+// Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) DeleteMemory(ctx context.Context, key string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM memory WHERE key = $1`, key)
-	if err != nil {
-		return fmt.Errorf("delete memory: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return s.RetryTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM memory WHERE key = $1`, key)
+		if err != nil {
+			return fmt.Errorf("delete memory: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // scanMemoryRow scans a *sql.Row into a MemoryEntry.

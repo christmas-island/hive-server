@@ -32,6 +32,7 @@ type Agent struct {
 }
 
 // Heartbeat upserts an agent record, updating its last_heartbeat and status.
+// Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string, status AgentStatus) (*Agent, error) {
 	now := time.Now().UTC()
 	capsJSON, err := json.Marshal(capabilities)
@@ -42,15 +43,18 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 		capsJSON = []byte(`[]`)
 	}
 
-	// Upsert: insert or update, preserving registered_at on conflict.
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (id) DO UPDATE SET
-			status         = EXCLUDED.status,
-			capabilities   = EXCLUDED.capabilities,
-			last_heartbeat = EXCLUDED.last_heartbeat
-	`, id, id, string(status), string(capsJSON), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
+		// Upsert: insert or update, preserving registered_at on conflict.
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (id) DO UPDATE SET
+				status         = EXCLUDED.status,
+				capabilities   = EXCLUDED.capabilities,
+				last_heartbeat = EXCLUDED.last_heartbeat
+		`, id, id, string(status), string(capsJSON), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("heartbeat upsert: %w", err)
 	}

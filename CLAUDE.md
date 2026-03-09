@@ -29,10 +29,7 @@ hive-server: REST API for cross-agent memory and task coordination. CockroachDB-
 
 CLI flag `--database-url` overrides the env var.
 
-### Test Strategy
-
-- **Unit tests** (`go test ./...`): Handler tests use an in-memory mock store — no external database required. Store tests are gated behind `//go:build integration` and excluded by default.
-- **Integration tests** (`go test -tags integration ./...`): Store tests run against a live CockroachDB/PostgreSQL via `DATABASE_URL`. Skipped when `DATABASE_URL` is not set.
+Store tests and handler integration tests require `DATABASE_URL` to be set. They are skipped automatically when no live DB is available.
 
 ## Conventions
 
