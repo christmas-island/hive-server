@@ -45,5 +45,5 @@ repos:
       - id: markdownlint-cli2
         args: ["--fix"]
         files: ".*\\.(md|mdc)$"
-        exclude: "^(k8s/.*|WARP\\.md|\\.claude/.*|CLAUDE\\.md)$"
+        exclude: "^(k8s/.*|context/.*|WARP\\.md|\\.claude/.*|CLAUDE\\.md)$"
         additional_dependencies: ["markdownlint-cli2"]
