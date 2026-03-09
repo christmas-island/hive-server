@@ -8,7 +8,7 @@ hive-server: REST API for cross-agent memory and task coordination.
 - `internal/handlers/` — HTTP handlers, chi router, auth middleware
 - `internal/store/` — SQLite persistence, migrations
 - `internal/log/` — Logging
-- `k8s/` — Kubernetes manifests
+- `script/` — Lifecycle scripts (bootstrap, setup, test, server)
 - `.github/` — CI/CD workflows
 
 ## Key Patterns
@@ -25,4 +25,4 @@ hive-server: REST API for cross-agent memory and task coordination.
 - Idiomatic Go, `golangci-lint` for linting
 - Tests alongside code (`_test.go`)
 - Multi-stage Docker builds
-- k8s deploy via kustomize
+- k8s manifests managed externally (christmas-island/k8s repo)

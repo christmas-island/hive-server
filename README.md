@@ -80,5 +80,5 @@ internal/
   handlers/       HTTP handlers (chi router)
   store/          SQLite persistence
   log/            Logging
-k8s/              Kubernetes manifests
+script/           Lifecycle scripts (bootstrap, setup, test, server)
 ```
