@@ -1,152 +1,187 @@
 package handlers
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"net/http"
-	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
-// handleTaskCreate handles POST /api/v1/tasks
-func (a *API) handleTaskCreate(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Title       string   `json:"title"`
-		Description string   `json:"description"`
-		Priority    int      `json:"priority"`
-		Tags        []string `json:"tags"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body", nil)
-		return
-	}
-	if req.Title == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "title is required", nil)
-		return
-	}
+// --- Task input/output types ---
 
+type taskCreateInput struct {
+	XAgentID string `header:"X-Agent-ID" doc:"Calling agent identifier (becomes task creator)"`
+	Body     struct {
+		Title       string   `json:"title" doc:"Task title" minLength:"1"`
+		Description string   `json:"description,omitempty" doc:"Task description"`
+		Priority    int      `json:"priority,omitempty" doc:"Task priority"`
+		Tags        []string `json:"tags,omitempty" doc:"Task tags"`
+	}
+}
+
+type taskOutput struct {
+	Body *store.Task
+}
+
+type taskGetInput struct {
+	ID string `path:"id" doc:"Task ID"`
+}
+
+type taskListInput struct {
+	Status   string `query:"status" doc:"Filter by task status"`
+	Assignee string `query:"assignee" doc:"Filter by assignee"`
+	Creator  string `query:"creator" doc:"Filter by creator"`
+	Limit    int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
+	Offset   int    `query:"offset" doc:"Pagination offset" minimum:"0"`
+}
+
+type taskListOutput struct {
+	Body []*store.Task
+}
+
+type taskUpdateInput struct {
+	ID       string `path:"id" doc:"Task ID"`
+	XAgentID string `header:"X-Agent-ID" doc:"Calling agent identifier"`
+	Body     struct {
+		Status   *store.TaskStatus `json:"status,omitempty" doc:"New task status"`
+		Assignee *string           `json:"assignee,omitempty" doc:"New assignee"`
+		Note     *string           `json:"note,omitempty" doc:"Append a note"`
+	}
+}
+
+type taskDeleteInput struct {
+	ID string `path:"id" doc:"Task ID"`
+}
+
+type taskDeleteOutput struct{}
+
+// --- Handlers ---
+
+func (a *API) taskCreate(ctx context.Context, input *taskCreateInput) (*taskOutput, error) {
 	t := &store.Task{
-		Title:       req.Title,
-		Description: req.Description,
-		Priority:    req.Priority,
-		Tags:        req.Tags,
-		Creator:     agentID(r),
+		Title:       input.Body.Title,
+		Description: input.Body.Description,
+		Priority:    input.Body.Priority,
+		Tags:        input.Body.Tags,
+		Creator:     input.XAgentID,
 	}
-
-	result, err := a.store.CreateTask(r.Context(), t)
+	result, err := a.store.CreateTask(ctx, t)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create task", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to create task")
 	}
-	writeJSON(w, http.StatusCreated, result)
+	return &taskOutput{Body: result}, nil
 }
 
-// handleTaskGet handles GET /api/v1/tasks/{id}
-func (a *API) handleTaskGet(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	t, err := a.store.GetTask(r.Context(), id)
+func (a *API) taskGet(ctx context.Context, input *taskGetInput) (*taskOutput, error) {
+	t, err := a.store.GetTask(ctx, input.ID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "task not found", nil)
-		return
+		return nil, huma.Error404NotFound("task not found")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to get task", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to get task")
 	}
-	writeJSON(w, http.StatusOK, t)
+	return &taskOutput{Body: t}, nil
 }
 
-// handleTaskList handles GET /api/v1/tasks
-func (a *API) handleTaskList(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+func (a *API) taskList(ctx context.Context, input *taskListInput) (*taskListOutput, error) {
 	f := store.TaskFilter{
-		Status:   q.Get("status"),
-		Assignee: q.Get("assignee"),
-		Creator:  q.Get("creator"),
+		Status:   input.Status,
+		Assignee: input.Assignee,
+		Creator:  input.Creator,
+		Limit:    input.Limit,
+		Offset:   input.Offset,
 	}
-	if l := q.Get("limit"); l != "" {
-		n, err := strconv.Atoi(l)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit must be a non-negative integer", nil)
-			return
-		}
-		f.Limit = n
-	}
-	if o := q.Get("offset"); o != "" {
-		n, err := strconv.Atoi(o)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "bad_request", "offset must be a non-negative integer", nil)
-			return
-		}
-		f.Offset = n
-	}
-
-	tasks, err := a.store.ListTasks(r.Context(), f)
+	tasks, err := a.store.ListTasks(ctx, f)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list tasks", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to list tasks")
 	}
 	if tasks == nil {
 		tasks = []*store.Task{}
 	}
-	writeJSON(w, http.StatusOK, tasks)
+	return &taskListOutput{Body: tasks}, nil
 }
 
-// handleTaskUpdate handles PATCH /api/v1/tasks/{id}
-func (a *API) handleTaskUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-
-	var req struct {
-		Status   *string `json:"status"`
-		Assignee *string `json:"assignee"`
-		Note     *string `json:"note"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body", nil)
-		return
-	}
-
+func (a *API) taskUpdate(ctx context.Context, input *taskUpdateInput) (*taskOutput, error) {
 	upd := store.TaskUpdate{
-		Assignee: req.Assignee,
-		Note:     req.Note,
-		AgentID:  agentID(r),
+		Status:   input.Body.Status,
+		Assignee: input.Body.Assignee,
+		Note:     input.Body.Note,
+		AgentID:  input.XAgentID,
 	}
-	if req.Status != nil {
-		s := store.TaskStatus(*req.Status)
-		upd.Status = &s
-	}
-
-	result, err := a.store.UpdateTask(r.Context(), id, upd)
+	result, err := a.store.UpdateTask(ctx, input.ID, upd)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "task not found", nil)
-		return
+		return nil, huma.Error404NotFound("task not found")
 	}
 	if errors.Is(err, store.ErrInvalidTransition) {
-		writeError(w, http.StatusUnprocessableEntity, "invalid_transition",
-			"the requested status transition is not allowed", nil)
-		return
+		return nil, huma.Error422UnprocessableEntity("the requested status transition is not allowed")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update task", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to update task")
 	}
-	writeJSON(w, http.StatusOK, result)
+	return &taskOutput{Body: result}, nil
 }
 
-// handleTaskDelete handles DELETE /api/v1/tasks/{id}
-func (a *API) handleTaskDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	err := a.store.DeleteTask(r.Context(), id)
+func (a *API) taskDelete(ctx context.Context, input *taskDeleteInput) (*taskDeleteOutput, error) {
+	err := a.store.DeleteTask(ctx, input.ID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "task not found", nil)
-		return
+		return nil, huma.Error404NotFound("task not found")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete task", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to delete task")
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return &taskDeleteOutput{}, nil
+}
+
+// --- Registration ---
+
+func registerTasks(a *API, api huma.API) {
+	huma.Register(api, huma.Operation{
+		Method:        http.MethodPost,
+		Path:          "/api/v1/tasks",
+		Summary:       "Create a task",
+		Description:   "Create a new task. The calling agent becomes the creator.",
+		Tags:          []string{"Tasks"},
+		OperationID:   "create-task",
+		DefaultStatus: http.StatusCreated,
+	}, a.taskCreate)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodGet,
+		Path:        "/api/v1/tasks",
+		Summary:     "List tasks",
+		Description: "Return tasks, optionally filtered by status, assignee, or creator.",
+		Tags:        []string{"Tasks"},
+		OperationID: "list-tasks",
+	}, a.taskList)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodGet,
+		Path:        "/api/v1/tasks/{id}",
+		Summary:     "Get a task",
+		Description: "Retrieve a single task by ID.",
+		Tags:        []string{"Tasks"},
+		OperationID: "get-task",
+	}, a.taskGet)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodPatch,
+		Path:        "/api/v1/tasks/{id}",
+		Summary:     "Update a task",
+		Description: "Update task status, assignee, or append a note. Status changes are validated against the task state machine.",
+		Tags:        []string{"Tasks"},
+		OperationID: "update-task",
+	}, a.taskUpdate)
+
+	huma.Register(api, huma.Operation{
+		Method:        http.MethodDelete,
+		Path:          "/api/v1/tasks/{id}",
+		Summary:       "Delete a task",
+		Description:   "Remove a task and all its notes.",
+		Tags:          []string{"Tasks"},
+		OperationID:   "delete-task",
+		DefaultStatus: http.StatusNoContent,
+	}, a.taskDelete)
 }

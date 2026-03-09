@@ -1,121 +1,151 @@
 package handlers
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"net/http"
-	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
-// handleMemoryUpsert handles POST /api/v1/memory
-func (a *API) handleMemoryUpsert(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Key     string   `json:"key"`
-		Value   string   `json:"value"`
-		Tags    []string `json:"tags"`
-		Version int64    `json:"version"` // 0 means no version check
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body", nil)
-		return
-	}
-	if req.Key == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "key is required", nil)
-		return
-	}
-	if req.Value == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "value is required", nil)
-		return
-	}
+// --- Memory input/output types ---
 
-	aid := agentID(r)
+type memoryUpsertInput struct {
+	XAgentID string `header:"X-Agent-ID" doc:"Calling agent identifier"`
+	Body     struct {
+		Key     string   `json:"key" doc:"Memory key" minLength:"1"`
+		Value   string   `json:"value" doc:"Memory value" minLength:"1"`
+		Tags    []string `json:"tags,omitempty" doc:"Optional tags"`
+		Version int64    `json:"version,omitempty" doc:"Version for optimistic concurrency (0 = no check)"`
+	}
+}
+
+type memoryOutput struct {
+	Body *store.MemoryEntry
+}
+
+type memoryGetInput struct {
+	Key string `path:"key" doc:"Memory key"`
+}
+
+type memoryListInput struct {
+	Tag    string `query:"tag" doc:"Filter by tag"`
+	Agent  string `query:"agent" doc:"Filter by agent ID"`
+	Prefix string `query:"prefix" doc:"Filter by key prefix"`
+	Limit  int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
+	Offset int    `query:"offset" doc:"Pagination offset" minimum:"0"`
+}
+
+type memoryListOutput struct {
+	Body []*store.MemoryEntry
+}
+
+type memoryDeleteInput struct {
+	Key string `path:"key" doc:"Memory key"`
+}
+
+type memoryDeleteOutput struct{}
+
+// --- Handlers ---
+
+func (a *API) memoryUpsert(ctx context.Context, input *memoryUpsertInput) (*memoryOutput, error) {
 	entry := &store.MemoryEntry{
-		Key:     req.Key,
-		Value:   req.Value,
-		AgentID: aid,
-		Tags:    req.Tags,
-		Version: req.Version,
+		Key:     input.Body.Key,
+		Value:   input.Body.Value,
+		AgentID: input.XAgentID,
+		Tags:    input.Body.Tags,
+		Version: input.Body.Version,
 	}
 
-	result, err := a.store.UpsertMemory(r.Context(), entry)
+	result, err := a.store.UpsertMemory(ctx, entry)
 	if errors.Is(err, store.ErrConflict) {
-		writeError(w, http.StatusConflict, "conflict", "version conflict: stale data", nil)
-		return
+		return nil, huma.Error409Conflict("version conflict: stale data")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to upsert memory", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to upsert memory")
 	}
-
-	writeJSON(w, http.StatusOK, result)
+	return &memoryOutput{Body: result}, nil
 }
 
-// handleMemoryGet handles GET /api/v1/memory/{key}
-func (a *API) handleMemoryGet(w http.ResponseWriter, r *http.Request) {
-	key := chi.URLParam(r, "key")
-	entry, err := a.store.GetMemory(r.Context(), key)
+func (a *API) memoryGet(ctx context.Context, input *memoryGetInput) (*memoryOutput, error) {
+	entry, err := a.store.GetMemory(ctx, input.Key)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "memory entry not found", nil)
-		return
+		return nil, huma.Error404NotFound("memory entry not found")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to get memory", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to get memory")
 	}
-	writeJSON(w, http.StatusOK, entry)
+	return &memoryOutput{Body: entry}, nil
 }
 
-// handleMemoryList handles GET /api/v1/memory
-func (a *API) handleMemoryList(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+func (a *API) memoryList(ctx context.Context, input *memoryListInput) (*memoryListOutput, error) {
 	f := store.MemoryFilter{
-		Tag:    q.Get("tag"),
-		Agent:  q.Get("agent"),
-		Prefix: q.Get("prefix"),
+		Tag:    input.Tag,
+		Agent:  input.Agent,
+		Prefix: input.Prefix,
+		Limit:  input.Limit,
+		Offset: input.Offset,
 	}
-	if l := q.Get("limit"); l != "" {
-		n, err := strconv.Atoi(l)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit must be a non-negative integer", nil)
-			return
-		}
-		f.Limit = n
-	}
-	if o := q.Get("offset"); o != "" {
-		n, err := strconv.Atoi(o)
-		if err != nil || n < 0 {
-			writeError(w, http.StatusBadRequest, "bad_request", "offset must be a non-negative integer", nil)
-			return
-		}
-		f.Offset = n
-	}
-
-	entries, err := a.store.ListMemory(r.Context(), f)
+	entries, err := a.store.ListMemory(ctx, f)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list memory", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to list memory")
 	}
 	if entries == nil {
 		entries = []*store.MemoryEntry{}
 	}
-	writeJSON(w, http.StatusOK, entries)
+	return &memoryListOutput{Body: entries}, nil
 }
 
-// handleMemoryDelete handles DELETE /api/v1/memory/{key}
-func (a *API) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
-	key := chi.URLParam(r, "key")
-	err := a.store.DeleteMemory(r.Context(), key)
+func (a *API) memoryDelete(ctx context.Context, input *memoryDeleteInput) (*memoryDeleteOutput, error) {
+	err := a.store.DeleteMemory(ctx, input.Key)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "memory entry not found", nil)
-		return
+		return nil, huma.Error404NotFound("memory entry not found")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete memory", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to delete memory")
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return &memoryDeleteOutput{}, nil
+}
+
+// --- Registration ---
+
+func registerMemory(a *API, api huma.API) {
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodPost,
+		Path:        "/api/v1/memory",
+		Summary:     "Upsert a memory entry",
+		Description: "Create or update a memory entry by key. Supports optimistic concurrency via version.",
+		Tags:        []string{"Memory"},
+		OperationID: "upsert-memory",
+	}, a.memoryUpsert)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodGet,
+		Path:        "/api/v1/memory",
+		Summary:     "List memory entries",
+		Description: "Return memory entries, optionally filtered by tag, agent, or key prefix.",
+		Tags:        []string{"Memory"},
+		OperationID: "list-memory",
+	}, a.memoryList)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodGet,
+		Path:        "/api/v1/memory/{key}",
+		Summary:     "Get a memory entry",
+		Description: "Retrieve a single memory entry by key.",
+		Tags:        []string{"Memory"},
+		OperationID: "get-memory",
+	}, a.memoryGet)
+
+	huma.Register(api, huma.Operation{
+		Method:        http.MethodDelete,
+		Path:          "/api/v1/memory/{key}",
+		Summary:       "Delete a memory entry",
+		Description:   "Remove a memory entry by key.",
+		Tags:          []string{"Memory"},
+		OperationID:   "delete-memory",
+		DefaultStatus: http.StatusNoContent,
+	}, a.memoryDelete)
 }

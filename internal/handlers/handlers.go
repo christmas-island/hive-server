@@ -1,4 +1,4 @@
-// Package handlers implements the hive-server REST API.
+// Package handlers implements the hive-server REST API using Huma v2.
 package handlers
 
 import (
@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -48,26 +50,24 @@ func (a *API) routes() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
-	r.Use(a.authMiddleware)
 
-	r.Route("/api/v1", func(r chi.Router) {
-		// Memory
-		r.Post("/memory", a.handleMemoryUpsert)
-		r.Get("/memory", a.handleMemoryList)
-		r.Get("/memory/{key}", a.handleMemoryGet)
-		r.Delete("/memory/{key}", a.handleMemoryDelete)
+	// Health endpoints — no auth required, intentionally outside the API group.
+	r.Get("/health", handleHealth)
+	r.Get("/ready", handleReady)
 
-		// Tasks
-		r.Post("/tasks", a.handleTaskCreate)
-		r.Get("/tasks", a.handleTaskList)
-		r.Get("/tasks/{id}", a.handleTaskGet)
-		r.Patch("/tasks/{id}", a.handleTaskUpdate)
-		r.Delete("/tasks/{id}", a.handleTaskDelete)
+	// Authenticated API group: auth middleware wraps all Huma operations and
+	// the auto-generated OpenAPI docs/schema endpoints.
+	r.Group(func(r chi.Router) {
+		r.Use(a.authMiddleware)
 
-		// Agents
-		r.Post("/agents/{id}/heartbeat", a.handleAgentHeartbeat)
-		r.Get("/agents", a.handleAgentList)
-		r.Get("/agents/{id}", a.handleAgentGet)
+		config := huma.DefaultConfig("Hive API", "1.0.0")
+		config.Info.Description = "Cross-agent memory and task coordination API."
+
+		api := humachi.New(r, config)
+
+		registerMemory(a, api)
+		registerTasks(a, api)
+		registerAgents(a, api)
 	})
 
 	return r
@@ -78,27 +78,24 @@ type ctxKey string
 
 const ctxKeyAgentID ctxKey = "agent_id"
 
-// agentID extracts the X-Agent-ID from the request context.
-func agentID(r *http.Request) string {
-	if v, ok := r.Context().Value(ctxKeyAgentID).(string); ok {
-		return v
-	}
-	return ""
-}
-
-// authMiddleware validates the Bearer token and extracts X-Agent-ID.
+// authMiddleware validates the Bearer token and extracts X-Agent-ID into context.
 func (a *API) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// If no token configured, skip auth (useful for local dev).
+		// If no token configured, skip auth (local dev).
 		if a.token != "" {
 			auth := r.Header.Get("Authorization")
 			if auth != "Bearer "+a.token {
-				writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or missing bearer token", nil)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"error":   "unauthorized",
+					"message": "invalid or missing bearer token",
+				})
 				return
 			}
 		}
 
-		// Extract and inject agent ID into context.
+		// Inject agent ID into context for downstream use.
 		aid := r.Header.Get("X-Agent-ID")
 		ctx := r.Context()
 		if aid != "" {
@@ -108,21 +105,16 @@ func (a *API) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// writeJSON writes v as JSON with the given status code.
-func writeJSON(w http.ResponseWriter, status int, v any) {
+// handleHealth handles GET /health.
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// errorResponse is the standard error body.
-type errorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
-	Details any    `json:"details,omitempty"`
-}
-
-// writeError writes a standard JSON error response.
-func writeError(w http.ResponseWriter, status int, code, message string, details any) {
-	writeJSON(w, status, errorResponse{Error: code, Message: message, Details: details})
+// handleReady handles GET /ready.
+func handleReady(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 }

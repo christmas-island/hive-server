@@ -1,29 +1,41 @@
 package handlers
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
-// handleAgentHeartbeat handles POST /api/v1/agents/{id}/heartbeat
-func (a *API) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+// --- Agent input/output types ---
 
-	var req struct {
-		Capabilities []string `json:"capabilities"`
-		Status       string   `json:"status"`
+type agentHeartbeatInput struct {
+	ID   string `path:"id" doc:"Agent ID"`
+	Body struct {
+		Capabilities []string `json:"capabilities,omitempty" doc:"Agent capability list"`
+		Status       string   `json:"status,omitempty" doc:"Agent status: online or idle (defaults to online)"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body", nil)
-		return
-	}
+}
 
-	status := store.AgentStatus(req.Status)
+type agentOutput struct {
+	Body *store.Agent
+}
+
+type agentListOutput struct {
+	Body []*store.Agent
+}
+
+type agentGetInput struct {
+	ID string `path:"id" doc:"Agent ID"`
+}
+
+// --- Handlers ---
+
+func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*agentOutput, error) {
+	status := store.AgentStatus(input.Body.Status)
 	switch status {
 	case store.AgentStatusOnline, store.AgentStatusIdle:
 		// valid
@@ -31,38 +43,62 @@ func (a *API) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 		status = store.AgentStatusOnline
 	}
 
-	agent, err := a.store.Heartbeat(r.Context(), id, req.Capabilities, status)
+	agent, err := a.store.Heartbeat(ctx, input.ID, input.Body.Capabilities, status)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to record heartbeat", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to record heartbeat")
 	}
-	writeJSON(w, http.StatusOK, agent)
+	return &agentOutput{Body: agent}, nil
 }
 
-// handleAgentList handles GET /api/v1/agents
-func (a *API) handleAgentList(w http.ResponseWriter, r *http.Request) {
-	agents, err := a.store.ListAgents(r.Context())
+func (a *API) agentList(ctx context.Context, _ *struct{}) (*agentListOutput, error) {
+	agents, err := a.store.ListAgents(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list agents", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to list agents")
 	}
 	if agents == nil {
 		agents = []*store.Agent{}
 	}
-	writeJSON(w, http.StatusOK, agents)
+	return &agentListOutput{Body: agents}, nil
 }
 
-// handleAgentGet handles GET /api/v1/agents/{id}
-func (a *API) handleAgentGet(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	agent, err := a.store.GetAgent(r.Context(), id)
+func (a *API) agentGet(ctx context.Context, input *agentGetInput) (*agentOutput, error) {
+	agent, err := a.store.GetAgent(ctx, input.ID)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "not_found", "agent not found", nil)
-		return
+		return nil, huma.Error404NotFound("agent not found")
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to get agent", nil)
-		return
+		return nil, huma.Error500InternalServerError("failed to get agent")
 	}
-	writeJSON(w, http.StatusOK, agent)
+	return &agentOutput{Body: agent}, nil
+}
+
+// --- Registration ---
+
+func registerAgents(a *API, api huma.API) {
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodPost,
+		Path:        "/api/v1/agents/{id}/heartbeat",
+		Summary:     "Agent heartbeat",
+		Description: "Register or update an agent's presence. Creates the agent record if it doesn't exist.",
+		Tags:        []string{"Agents"},
+		OperationID: "agent-heartbeat",
+	}, a.agentHeartbeat)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodGet,
+		Path:        "/api/v1/agents",
+		Summary:     "List agents",
+		Description: "Return all known agents with their current presence status.",
+		Tags:        []string{"Agents"},
+		OperationID: "list-agents",
+	}, a.agentList)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodGet,
+		Path:        "/api/v1/agents/{id}",
+		Summary:     "Get an agent",
+		Description: "Retrieve a single agent by ID.",
+		Tags:        []string{"Agents"},
+		OperationID: "get-agent",
+	}, a.agentGet)
 }

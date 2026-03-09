@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -65,15 +64,13 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	// Build HTTP mux: health probes + API.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/ready", handleReady)
-	mux.Handle("/api/v1/", handlers.New(s, token))
+	// Build HTTP handler: chi router handles health probes, OpenAPI docs, and
+	// all API endpoints. Health and ready probes are registered without auth.
+	h := handlers.New(s, token)
 
 	srv := &http.Server{
 		Addr:         bind,
-		Handler:      mux,
+		Handler:      h,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -96,20 +93,4 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	return nil
-}
-
-func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func handleReady(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
-}
-
-func init() {
-	_ = fmt.Sprint // keep fmt import for future use
 }
