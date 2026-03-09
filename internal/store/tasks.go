@@ -89,6 +89,7 @@ type TaskUpdate struct {
 }
 
 // CreateTask inserts a new task and returns it.
+// Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) CreateTask(ctx context.Context, t *Task) (*Task, error) {
 	t.ID = uuid.New().String()
 	t.Status = TaskStatusOpen
@@ -104,13 +105,16 @@ func (s *Store) CreateTask(ctx context.Context, t *Task) (*Task, error) {
 		tagsJSON = []byte(`[]`)
 	}
 
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		t.ID, t.Title, t.Description, string(t.Status), t.Creator,
-		t.Assignee, t.Priority, string(tagsJSON),
-		now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
-	)
+	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			t.ID, t.Title, t.Description, string(t.Status), t.Creator,
+			t.Assignee, t.Priority, string(tagsJSON),
+			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+		)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("insert task: %w", err)
 	}
@@ -197,78 +201,78 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
 }
 
 // UpdateTask applies a TaskUpdate to a task, enforcing state machine rules.
+// Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Task, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// Fetch current task.
-	var t Task
-	var tagsRaw, createdStr, updatedStr string
-	err = tx.QueryRowContext(ctx,
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
-         FROM tasks WHERE id = $1`, id,
-	).Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
-		&t.Priority, &tagsRaw, &createdStr, &updatedStr)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("fetch task: %w", err)
-	}
-
-	now := time.Now().UTC()
-
-	// Apply status transition.
-	if upd.Status != nil && *upd.Status != t.Status {
-		if !IsValidTransition(t.Status, *upd.Status) {
-			return nil, ErrInvalidTransition
+	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
+		// Fetch current task.
+		var t Task
+		var tagsRaw, createdStr, updatedStr string
+		err := tx.QueryRowContext(ctx,
+			`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+             FROM tasks WHERE id = $1`, id,
+		).Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
+			&t.Priority, &tagsRaw, &createdStr, &updatedStr)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
 		}
-		t.Status = *upd.Status
-	}
+		if err != nil {
+			return fmt.Errorf("fetch task: %w", err)
+		}
 
-	// Apply assignee change.
-	if upd.Assignee != nil {
-		t.Assignee = *upd.Assignee
-	}
+		now := time.Now().UTC()
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
-		string(t.Status), t.Assignee, now.Format(time.RFC3339Nano), id,
-	); err != nil {
-		return nil, fmt.Errorf("update task: %w", err)
-	}
+		// Apply status transition.
+		if upd.Status != nil && *upd.Status != t.Status {
+			if !IsValidTransition(t.Status, *upd.Status) {
+				return ErrInvalidTransition
+			}
+			t.Status = *upd.Status
+		}
 
-	// Append note if provided.
-	if upd.Note != nil && *upd.Note != "" {
+		// Apply assignee change.
+		if upd.Assignee != nil {
+			t.Assignee = *upd.Assignee
+		}
+
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO task_notes (task_id, note, agent_id, created_at) VALUES ($1, $2, $3, $4)`,
-			id, *upd.Note, upd.AgentID, now.Format(time.RFC3339Nano),
+			`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
+			string(t.Status), t.Assignee, now.Format(time.RFC3339Nano), id,
 		); err != nil {
-			return nil, fmt.Errorf("insert task note: %w", err)
+			return fmt.Errorf("update task: %w", err)
 		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
+		// Append note if provided.
+		if upd.Note != nil && *upd.Note != "" {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO task_notes (task_id, note, agent_id, created_at) VALUES ($1, $2, $3, $4)`,
+				id, *upd.Note, upd.AgentID, now.Format(time.RFC3339Nano),
+			); err != nil {
+				return fmt.Errorf("insert task note: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return s.GetTask(ctx, id)
 }
 
 // DeleteTask removes a task (and its notes via cascade) by ID.
+// Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) DeleteTask(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("delete task: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return s.RetryTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM tasks WHERE id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("delete task: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // loadTaskNotes fetches all notes for a task and attaches them.
