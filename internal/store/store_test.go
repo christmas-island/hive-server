@@ -6,16 +6,44 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach-go/v2/testserver"
+
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
+// testServer holds the ephemeral CockroachDB instance shared across tests in this package.
+// Initialized once in TestMain.
+var testServer testserver.TestServer
+
+func TestMain(m *testing.M) {
+	// If DATABASE_URL is set, use that (external DB).
+	// Otherwise, start an ephemeral CockroachDB via testserver.
+	if os.Getenv("DATABASE_URL") == "" {
+		ts, err := testserver.NewTestServer()
+		if err != nil {
+			panic("failed to start ephemeral CockroachDB: " + err.Error())
+		}
+		testServer = ts
+		pgURL := ts.PGURL()
+		if pgURL != nil {
+			os.Setenv("DATABASE_URL", pgURL.String())
+		}
+	}
+
+	code := m.Run()
+
+	if testServer != nil {
+		testServer.Stop()
+	}
+	os.Exit(code)
+}
+
 // testDatabaseURL returns the DATABASE_URL for store tests.
-// Tests are skipped if the env var is not set (no live DB required in CI without CRDB).
 func testDatabaseURL(t *testing.T) string {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping store integration test")
+		t.Fatal("DATABASE_URL not set and ephemeral CRDB failed to start")
 	}
 	return url
 }
@@ -88,6 +116,3 @@ func TestSchemaTables(t *testing.T) {
 		}
 	}
 }
-
-// Remove unused import.
-var _ = os.DevNull
