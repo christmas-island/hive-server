@@ -58,7 +58,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 	var existing MemoryEntry
 	var tagsRaw, createdStr, updatedStr string
 	err = tx.QueryRowContext(ctx,
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = ?`,
+		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
 		entry.Key,
 	).Scan(&existing.Key, &existing.Value, &existing.AgentID, &tagsRaw, &existing.Version, &createdStr, &updatedStr)
 
@@ -71,7 +71,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 		}
 		_, err = tx.ExecContext(ctx,
 			`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)
-             VALUES (?, ?, ?, ?, 1, ?, ?)`,
+             VALUES ($1, $2, $3, $4, 1, $5, $6)`,
 			entry.Key, entry.Value, entry.AgentID, string(tagsJSON),
 			createdAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		)
@@ -95,8 +95,8 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 			return nil, ErrConflict
 		}
 		_, err = tx.ExecContext(ctx,
-			`UPDATE memory SET value = ?, agent_id = ?, tags = ?, version = version + 1, updated_at = ?
-             WHERE key = ?`,
+			`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4
+             WHERE key = $5`,
 			entry.Value, entry.AgentID, string(tagsJSON),
 			now.Format(time.RFC3339Nano), entry.Key,
 		)
@@ -120,7 +120,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 // GetMemory retrieves a single memory entry by key.
 func (s *Store) GetMemory(ctx context.Context, key string) (*MemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = ?`,
+		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
 		key,
 	)
 	return scanMemoryRow(row)
@@ -130,34 +130,25 @@ func (s *Store) GetMemory(ctx context.Context, key string) (*MemoryEntry, error)
 func (s *Store) ListMemory(ctx context.Context, f MemoryFilter) ([]*MemoryEntry, error) {
 	q := `SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1`
 	args := []any{}
+	argIdx := 1
 
 	if f.Tag != "" {
-		q += ` AND json_each.value = ?`
-		// We use json_each to search tags.
-		q = `SELECT m.key, m.value, m.agent_id, m.tags, m.version, m.created_at, m.updated_at
-             FROM memory m, json_each(m.tags)
-             WHERE json_each.value = ?`
+		// Use JSONB @> operator to check if the tags array contains the given tag.
+		q += fmt.Sprintf(` AND tags @> jsonb_build_array($%d::text)`, argIdx)
 		args = append(args, f.Tag)
-		if f.Agent != "" {
-			q += ` AND m.agent_id = ?`
-			args = append(args, f.Agent)
-		}
-		if f.Prefix != "" {
-			q += ` AND m.key LIKE ?`
-			args = append(args, f.Prefix+"%")
-		}
-		q += ` GROUP BY m.key ORDER BY m.updated_at DESC`
-	} else {
-		if f.Agent != "" {
-			q += ` AND agent_id = ?`
-			args = append(args, f.Agent)
-		}
-		if f.Prefix != "" {
-			q += ` AND key LIKE ?`
-			args = append(args, f.Prefix+"%")
-		}
-		q += ` ORDER BY updated_at DESC`
+		argIdx++
 	}
+	if f.Agent != "" {
+		q += fmt.Sprintf(` AND agent_id = $%d`, argIdx)
+		args = append(args, f.Agent)
+		argIdx++
+	}
+	if f.Prefix != "" {
+		q += fmt.Sprintf(` AND key LIKE $%d`, argIdx)
+		args = append(args, f.Prefix+"%")
+		argIdx++
+	}
+	q += ` ORDER BY updated_at DESC`
 
 	if f.Limit > 0 {
 		q += fmt.Sprintf(` LIMIT %d`, f.Limit)
@@ -187,7 +178,7 @@ func (s *Store) ListMemory(ctx context.Context, f MemoryFilter) ([]*MemoryEntry,
 
 // DeleteMemory removes a memory entry by key.
 func (s *Store) DeleteMemory(ctx context.Context, key string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM memory WHERE key = ?`, key)
+	res, err := s.db.ExecContext(ctx, `DELETE FROM memory WHERE key = $1`, key)
 	if err != nil {
 		return fmt.Errorf("delete memory: %w", err)
 	}

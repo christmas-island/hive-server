@@ -106,7 +106,7 @@ func (s *Store) CreateTask(ctx context.Context, t *Task) (*Task, error) {
 
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		t.ID, t.Title, t.Description, string(t.Status), t.Creator,
 		t.Assignee, t.Priority, string(tagsJSON),
 		now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
@@ -123,7 +123,7 @@ func (s *Store) CreateTask(ctx context.Context, t *Task) (*Task, error) {
 func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
-         FROM tasks WHERE id = ?`,
+         FROM tasks WHERE id = $1`,
 		id,
 	)
 	t, err := scanTaskRow(row)
@@ -141,18 +141,22 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
 	q := `SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
           FROM tasks WHERE 1=1`
 	args := []any{}
+	argIdx := 1
 
 	if f.Status != "" {
-		q += ` AND status = ?`
+		q += fmt.Sprintf(` AND status = $%d`, argIdx)
 		args = append(args, f.Status)
+		argIdx++
 	}
 	if f.Assignee != "" {
-		q += ` AND assignee = ?`
+		q += fmt.Sprintf(` AND assignee = $%d`, argIdx)
 		args = append(args, f.Assignee)
+		argIdx++
 	}
 	if f.Creator != "" {
-		q += ` AND creator = ?`
+		q += fmt.Sprintf(` AND creator = $%d`, argIdx)
 		args = append(args, f.Creator)
+		argIdx++
 	}
 	q += ` ORDER BY created_at DESC`
 	if f.Limit > 0 {
@@ -205,7 +209,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Tas
 	var tagsRaw, createdStr, updatedStr string
 	err = tx.QueryRowContext(ctx,
 		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
-         FROM tasks WHERE id = ?`, id,
+         FROM tasks WHERE id = $1`, id,
 	).Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
 		&t.Priority, &tagsRaw, &createdStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -231,7 +235,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Tas
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE tasks SET status = ?, assignee = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
 		string(t.Status), t.Assignee, now.Format(time.RFC3339Nano), id,
 	); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
@@ -240,7 +244,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Tas
 	// Append note if provided.
 	if upd.Note != nil && *upd.Note != "" {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO task_notes (task_id, note, agent_id, created_at) VALUES (?, ?, ?, ?)`,
+			`INSERT INTO task_notes (task_id, note, agent_id, created_at) VALUES ($1, $2, $3, $4)`,
 			id, *upd.Note, upd.AgentID, now.Format(time.RFC3339Nano),
 		); err != nil {
 			return nil, fmt.Errorf("insert task note: %w", err)
@@ -256,7 +260,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Tas
 
 // DeleteTask removes a task (and its notes via cascade) by ID.
 func (s *Store) DeleteTask(ctx context.Context, id string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = ?`, id)
+	res, err := s.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete task: %w", err)
 	}
@@ -270,7 +274,7 @@ func (s *Store) DeleteTask(ctx context.Context, id string) error {
 // loadTaskNotes fetches all notes for a task and attaches them.
 func (s *Store) loadTaskNotes(ctx context.Context, t *Task) error {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT note FROM task_notes WHERE task_id = ? ORDER BY created_at ASC, id ASC`,
+		`SELECT note FROM task_notes WHERE task_id = $1 ORDER BY created_at ASC, id ASC`,
 		t.ID,
 	)
 	if err != nil {

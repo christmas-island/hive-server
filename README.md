@@ -1,6 +1,6 @@
 # hive-server
 
-REST API for cross-agent memory and task coordination. SQLite-backed, single binary.
+REST API for cross-agent memory and task coordination. CockroachDB-backed, single binary.
 
 ## Run
 
@@ -12,11 +12,26 @@ Default: `0.0.0.0:8080`. Override with `--bind` or `PORT` env var.
 
 ## Environment Variables
 
-| Variable       | Description                                 | Default         |
-| -------------- | ------------------------------------------- | --------------- |
-| `PORT`         | Listen port                                 | `8080`          |
-| `HIVE_TOKEN`   | Bearer token for API auth (empty = no auth) | _(none)_        |
-| `HIVE_DB_PATH` | SQLite database path                        | `/data/hive.db` |
+| Variable       | Description                                 | Default                                                  |
+| -------------- | ------------------------------------------- | -------------------------------------------------------- |
+| `PORT`         | Listen port                                 | `8080`                                                   |
+| `HIVE_TOKEN`   | Bearer token for API auth (empty = no auth) | _(none)_                                                 |
+| `DATABASE_URL` | PostgreSQL/CockroachDB connection URL       | `postgresql://root@localhost:26257/hive?sslmode=disable` |
+
+The `--database-url` CLI flag overrides `DATABASE_URL`.
+
+## Database Setup (CockroachDB)
+
+```bash
+# Start a local single-node CockroachDB instance
+cockroach start-single-node --insecure --listen-addr=localhost:26257
+
+# Create the database
+cockroach sql --insecure -e "CREATE DATABASE IF NOT EXISTS hive;"
+
+# Run the server (schema migrations run automatically on startup)
+DATABASE_URL="postgresql://root@localhost:26257/hive?sslmode=disable" go run ./cmd/app serve
+```
 
 ## API
 
@@ -69,7 +84,9 @@ go build -o hive-server ./cmd/app
 
 ```bash
 docker build -t hive-server .
-docker run -p 8080:8080 -v hive-data:/data hive-server serve
+docker run -p 8080:8080 \
+  -e DATABASE_URL="postgresql://root@crdb:26257/hive?sslmode=disable" \
+  hive-server serve
 ```
 
 ## Structure
@@ -78,7 +95,7 @@ docker run -p 8080:8080 -v hive-data:/data hive-server serve
 cmd/app/          CLI entrypoint (cobra)
 internal/
   handlers/       HTTP handlers (chi router)
-  store/          SQLite persistence
+  store/          CockroachDB/PostgreSQL persistence
   log/            Logging
 script/           Lifecycle scripts (bootstrap, setup, test, server)
 ```

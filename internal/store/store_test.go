@@ -2,29 +2,46 @@ package store_test
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
-// newTestStore creates a temporary SQLite store for testing.
+// testDatabaseURL returns the DATABASE_URL for store tests.
+// Tests are skipped if the env var is not set (no live DB required in CI without CRDB).
+func testDatabaseURL(t *testing.T) string {
+	t.Helper()
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		t.Skip("DATABASE_URL not set; skipping store integration test")
+	}
+	return url
+}
+
+// newTestStore creates a store connected to the test database.
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	dir := t.TempDir()
-	s, err := store.New(filepath.Join(dir, "test.db"))
+	url := testDatabaseURL(t)
+	s, err := store.New(url)
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() {
+		cleanTestDB(t, s)
+		_ = s.Close()
+	})
 	return s
 }
 
-// tempDBPath returns a path for a temporary database.
-func tempDBPath(t *testing.T) string {
+// cleanTestDB removes all rows inserted during a test to keep the DB clean between runs.
+func cleanTestDB(t *testing.T, s *store.Store) {
 	t.Helper()
-	dir := t.TempDir()
-	return filepath.Join(dir, "test.db")
+	db := s.DB()
+	for _, tbl := range []string{"task_notes", "tasks", "memory", "agents"} {
+		if _, err := db.Exec("DELETE FROM " + tbl); err != nil {
+			t.Logf("cleanup %s: %v", tbl, err)
+		}
+	}
 }
 
 func TestNew(t *testing.T) {
@@ -34,40 +51,22 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestNewInvalidPath(t *testing.T) {
-	_, err := store.New("/nonexistent/directory/test.db")
+func TestNewInvalidURL(t *testing.T) {
+	_, err := store.New("postgresql://invalid-host-that-does-not-exist:9999/hive?sslmode=disable&connect_timeout=1")
 	if err == nil {
-		t.Fatal("expected error for invalid path")
+		t.Fatal("expected error for invalid connection URL")
 	}
 }
 
 func TestClose(t *testing.T) {
-	path := tempDBPath(t)
-	s, err := store.New(path)
+	url := testDatabaseURL(t)
+	s, err := store.New(url)
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
+	cleanTestDB(t, s)
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
-	}
-}
-
-func TestWALMode(t *testing.T) {
-	path := tempDBPath(t)
-	s, err := store.New(path)
-	if err != nil {
-		t.Fatalf("store.New: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	// Check WAL mode is enabled.
-	var mode string
-	row := s.DB().QueryRow(`PRAGMA journal_mode`)
-	if err := row.Scan(&mode); err != nil {
-		t.Fatalf("PRAGMA journal_mode: %v", err)
-	}
-	if mode != "wal" {
-		t.Errorf("expected WAL mode, got %q", mode)
 	}
 }
 
@@ -79,7 +78,8 @@ func TestSchemaTables(t *testing.T) {
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow(
-			`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, table,
+			`SELECT table_name FROM information_schema.tables
+             WHERE table_schema = current_schema() AND table_name = $1`, table,
 		).Scan(&name)
 		if err != nil {
 			t.Errorf("table %q not found: %v", table, err)

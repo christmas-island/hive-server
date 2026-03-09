@@ -42,14 +42,14 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 		capsJSON = []byte(`[]`)
 	}
 
-	// Upsert: insert or replace, preserving registered_at on updates.
+	// Upsert: insert or update, preserving registered_at on conflict.
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			status         = excluded.status,
-			capabilities   = excluded.capabilities,
-			last_heartbeat = excluded.last_heartbeat
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET
+			status         = EXCLUDED.status,
+			capabilities   = EXCLUDED.capabilities,
+			last_heartbeat = EXCLUDED.last_heartbeat
 	`, id, id, string(status), string(capsJSON), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, fmt.Errorf("heartbeat upsert: %w", err)
@@ -61,7 +61,7 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 // GetAgent retrieves a single agent by ID, applying the offline threshold.
 func (s *Store) GetAgent(ctx context.Context, id string) (*Agent, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = ?`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
 		id,
 	)
 	return scanAgentRow(row)
