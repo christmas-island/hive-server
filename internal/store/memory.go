@@ -8,38 +8,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/christmas-island/hive-server/internal/model"
 )
-
-// ErrNotFound is returned when a requested record does not exist.
-var ErrNotFound = errors.New("not found")
-
-// ErrConflict is returned when an optimistic concurrency check fails.
-var ErrConflict = errors.New("version conflict")
-
-// MemoryEntry represents a shared memory entry.
-type MemoryEntry struct {
-	Key       string    `json:"key"`
-	Value     string    `json:"value"`
-	AgentID   string    `json:"agent_id"`
-	Tags      []string  `json:"tags"`
-	Version   int64     `json:"version"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// MemoryFilter holds optional filter parameters for listing memory entries.
-type MemoryFilter struct {
-	Tag    string
-	Agent  string
-	Prefix string
-	Limit  int
-	Offset int
-}
 
 // UpsertMemory creates or updates a memory entry.
 // If version > 0 in entry, it performs an optimistic concurrency check.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
-func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEntry, error) {
+func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*model.MemoryEntry, error) {
 	now := time.Now().UTC()
 	if entry.Tags == nil {
 		entry.Tags = []string{}
@@ -51,7 +27,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 
 	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
 		// Check if entry exists already.
-		var existing MemoryEntry
+		var existing model.MemoryEntry
 		var tagsRaw, createdStr, updatedStr string
 		err := tx.QueryRowContext(ctx,
 			`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
@@ -88,7 +64,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 
 			// Optimistic concurrency check.
 			if entry.Version > 0 && existing.Version != entry.Version {
-				return ErrConflict
+				return model.ErrConflict
 			}
 			_, err = tx.ExecContext(ctx,
 				`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4
@@ -115,7 +91,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *MemoryEntry) (*MemoryEn
 }
 
 // GetMemory retrieves a single memory entry by key.
-func (s *Store) GetMemory(ctx context.Context, key string) (*MemoryEntry, error) {
+func (s *Store) GetMemory(ctx context.Context, key string) (*model.MemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
 		key,
@@ -124,7 +100,7 @@ func (s *Store) GetMemory(ctx context.Context, key string) (*MemoryEntry, error)
 }
 
 // ListMemory returns memory entries matching the filter.
-func (s *Store) ListMemory(ctx context.Context, f MemoryFilter) ([]*MemoryEntry, error) {
+func (s *Store) ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error) {
 	q := `SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1`
 	args := []any{}
 	argIdx := 1
@@ -162,7 +138,7 @@ func (s *Store) ListMemory(ctx context.Context, f MemoryFilter) ([]*MemoryEntry,
 	}
 	defer rows.Close()
 
-	var entries []*MemoryEntry
+	var entries []*model.MemoryEntry
 	for rows.Next() {
 		entry, err := scanMemoryRows(rows)
 		if err != nil {
@@ -183,20 +159,20 @@ func (s *Store) DeleteMemory(ctx context.Context, key string) error {
 		}
 		n, _ := res.RowsAffected()
 		if n == 0 {
-			return ErrNotFound
+			return model.ErrNotFound
 		}
 		return nil
 	})
 }
 
 // scanMemoryRow scans a *sql.Row into a MemoryEntry.
-func scanMemoryRow(row *sql.Row) (*MemoryEntry, error) {
-	var e MemoryEntry
+func scanMemoryRow(row *sql.Row) (*model.MemoryEntry, error) {
+	var e model.MemoryEntry
 	var tagsRaw string
 	var createdStr, updatedStr string
 	err := row.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version, &createdStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, model.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan memory: %w", err)
@@ -205,8 +181,8 @@ func scanMemoryRow(row *sql.Row) (*MemoryEntry, error) {
 }
 
 // scanMemoryRows scans a *sql.Rows into a MemoryEntry.
-func scanMemoryRows(rows *sql.Rows) (*MemoryEntry, error) {
-	var e MemoryEntry
+func scanMemoryRows(rows *sql.Rows) (*model.MemoryEntry, error) {
+	var e model.MemoryEntry
 	var tagsRaw string
 	var createdStr, updatedStr string
 	if err := rows.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version, &createdStr, &updatedStr); err != nil {
@@ -215,7 +191,7 @@ func scanMemoryRows(rows *sql.Rows) (*MemoryEntry, error) {
 	return finishMemoryScan(&e, tagsRaw, createdStr, updatedStr)
 }
 
-func finishMemoryScan(e *MemoryEntry, tagsRaw, createdStr, updatedStr string) (*MemoryEntry, error) {
+func finishMemoryScan(e *model.MemoryEntry, tagsRaw, createdStr, updatedStr string) (*model.MemoryEntry, error) {
 	if err := json.Unmarshal([]byte(tagsRaw), &e.Tags); err != nil {
 		// Fall back to empty slice on bad JSON.
 		e.Tags = []string{}

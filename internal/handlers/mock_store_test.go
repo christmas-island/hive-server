@@ -8,17 +8,17 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // mockStore is an in-memory implementation of handlers.Store for unit tests.
 // All methods are safe for concurrent use.
 type mockStore struct {
 	mu       sync.Mutex
-	memory   map[string]*store.MemoryEntry
-	tasks    map[string]*store.Task
+	memory   map[string]*model.MemoryEntry
+	tasks    map[string]*model.Task
 	notes    map[string][]string // task_id -> notes (ordered)
-	agents   map[string]*store.Agent
+	agents   map[string]*model.Agent
 	notesMeta map[string][]noteMeta // task_id -> note metadata
 }
 
@@ -29,17 +29,17 @@ type noteMeta struct {
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		memory:    make(map[string]*store.MemoryEntry),
-		tasks:     make(map[string]*store.Task),
+		memory:    make(map[string]*model.MemoryEntry),
+		tasks:     make(map[string]*model.Task),
 		notes:     make(map[string][]string),
-		agents:    make(map[string]*store.Agent),
+		agents:    make(map[string]*model.Agent),
 		notesMeta: make(map[string][]noteMeta),
 	}
 }
 
 // --- Memory ---
 
-func (m *mockStore) UpsertMemory(_ context.Context, entry *store.MemoryEntry) (*store.MemoryEntry, error) {
+func (m *mockStore) UpsertMemory(_ context.Context, entry *model.MemoryEntry) (*model.MemoryEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -50,7 +50,7 @@ func (m *mockStore) UpsertMemory(_ context.Context, entry *store.MemoryEntry) (*
 
 	existing, exists := m.memory[entry.Key]
 	if !exists {
-		e := &store.MemoryEntry{
+		e := &model.MemoryEntry{
 			Key:       entry.Key,
 			Value:     entry.Value,
 			AgentID:   entry.AgentID,
@@ -65,7 +65,7 @@ func (m *mockStore) UpsertMemory(_ context.Context, entry *store.MemoryEntry) (*
 
 	// Optimistic concurrency check.
 	if entry.Version > 0 && existing.Version != entry.Version {
-		return nil, store.ErrConflict
+		return nil, model.ErrConflict
 	}
 
 	existing.Value = entry.Value
@@ -76,22 +76,22 @@ func (m *mockStore) UpsertMemory(_ context.Context, entry *store.MemoryEntry) (*
 	return copyMemoryEntry(existing), nil
 }
 
-func (m *mockStore) GetMemory(_ context.Context, key string) (*store.MemoryEntry, error) {
+func (m *mockStore) GetMemory(_ context.Context, key string) (*model.MemoryEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	e, ok := m.memory[key]
 	if !ok {
-		return nil, store.ErrNotFound
+		return nil, model.ErrNotFound
 	}
 	return copyMemoryEntry(e), nil
 }
 
-func (m *mockStore) ListMemory(_ context.Context, f store.MemoryFilter) ([]*store.MemoryEntry, error) {
+func (m *mockStore) ListMemory(_ context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var result []*store.MemoryEntry
+	var result []*model.MemoryEntry
 	for _, e := range m.memory {
 		if f.Agent != "" && e.AgentID != f.Agent {
 			continue
@@ -120,7 +120,7 @@ func (m *mockStore) DeleteMemory(_ context.Context, key string) error {
 	defer m.mu.Unlock()
 
 	if _, ok := m.memory[key]; !ok {
-		return store.ErrNotFound
+		return model.ErrNotFound
 	}
 	delete(m.memory, key)
 	return nil
@@ -128,16 +128,16 @@ func (m *mockStore) DeleteMemory(_ context.Context, key string) error {
 
 // --- Tasks ---
 
-func (m *mockStore) CreateTask(_ context.Context, t *store.Task) (*store.Task, error) {
+func (m *mockStore) CreateTask(_ context.Context, t *model.Task) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now().UTC()
-	task := &store.Task{
+	task := &model.Task{
 		ID:          uuid.New().String(),
 		Title:       t.Title,
 		Description: t.Description,
-		Status:      store.TaskStatusOpen,
+		Status:      model.TaskStatusOpen,
 		Creator:     t.Creator,
 		Assignee:    t.Assignee,
 		Priority:    t.Priority,
@@ -154,13 +154,13 @@ func (m *mockStore) CreateTask(_ context.Context, t *store.Task) (*store.Task, e
 	return copyTask(task), nil
 }
 
-func (m *mockStore) GetTask(_ context.Context, id string) (*store.Task, error) {
+func (m *mockStore) GetTask(_ context.Context, id string) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	t, ok := m.tasks[id]
 	if !ok {
-		return nil, store.ErrNotFound
+		return nil, model.ErrNotFound
 	}
 	result := copyTask(t)
 	result.Notes = make([]string, len(m.notes[id]))
@@ -168,11 +168,11 @@ func (m *mockStore) GetTask(_ context.Context, id string) (*store.Task, error) {
 	return result, nil
 }
 
-func (m *mockStore) ListTasks(_ context.Context, f store.TaskFilter) ([]*store.Task, error) {
+func (m *mockStore) ListTasks(_ context.Context, f model.TaskFilter) ([]*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var result []*store.Task
+	var result []*model.Task
 	for _, t := range m.tasks {
 		if f.Status != "" && string(t.Status) != f.Status {
 			continue
@@ -199,19 +199,19 @@ func (m *mockStore) ListTasks(_ context.Context, f store.TaskFilter) ([]*store.T
 	return result, nil
 }
 
-func (m *mockStore) UpdateTask(_ context.Context, id string, upd store.TaskUpdate) (*store.Task, error) {
+func (m *mockStore) UpdateTask(_ context.Context, id string, upd model.TaskUpdate) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	t, ok := m.tasks[id]
 	if !ok {
-		return nil, store.ErrNotFound
+		return nil, model.ErrNotFound
 	}
 
 	// Apply status transition.
 	if upd.Status != nil && *upd.Status != t.Status {
-		if !store.IsValidTransition(t.Status, *upd.Status) {
-			return nil, store.ErrInvalidTransition
+		if !model.IsValidTransition(t.Status, *upd.Status) {
+			return nil, model.ErrInvalidTransition
 		}
 		t.Status = *upd.Status
 	}
@@ -239,7 +239,7 @@ func (m *mockStore) DeleteTask(_ context.Context, id string) error {
 	defer m.mu.Unlock()
 
 	if _, ok := m.tasks[id]; !ok {
-		return store.ErrNotFound
+		return model.ErrNotFound
 	}
 	delete(m.tasks, id)
 	delete(m.notes, id)
@@ -248,7 +248,7 @@ func (m *mockStore) DeleteTask(_ context.Context, id string) error {
 
 // --- Agents ---
 
-func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status store.AgentStatus) (*store.Agent, error) {
+func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -259,7 +259,7 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 
 	existing, ok := m.agents[id]
 	if !ok {
-		agent := &store.Agent{
+		agent := &model.Agent{
 			ID:            id,
 			Name:          id,
 			Status:        status,
@@ -277,22 +277,22 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 	return copyAgent(existing), nil
 }
 
-func (m *mockStore) GetAgent(_ context.Context, id string) (*store.Agent, error) {
+func (m *mockStore) GetAgent(_ context.Context, id string) (*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	a, ok := m.agents[id]
 	if !ok {
-		return nil, store.ErrNotFound
+		return nil, model.ErrNotFound
 	}
 	return copyAgent(a), nil
 }
 
-func (m *mockStore) ListAgents(_ context.Context) ([]*store.Agent, error) {
+func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var result []*store.Agent
+	var result []*model.Agent
 	for _, a := range m.agents {
 		result = append(result, copyAgent(a))
 	}
@@ -308,10 +308,10 @@ func (m *mockStore) Ping(_ context.Context) error {
 
 // --- Helpers ---
 
-func copyMemoryEntry(e *store.MemoryEntry) *store.MemoryEntry {
+func copyMemoryEntry(e *model.MemoryEntry) *model.MemoryEntry {
 	tags := make([]string, len(e.Tags))
 	copy(tags, e.Tags)
-	return &store.MemoryEntry{
+	return &model.MemoryEntry{
 		Key:       e.Key,
 		Value:     e.Value,
 		AgentID:   e.AgentID,
@@ -322,12 +322,12 @@ func copyMemoryEntry(e *store.MemoryEntry) *store.MemoryEntry {
 	}
 }
 
-func copyTask(t *store.Task) *store.Task {
+func copyTask(t *model.Task) *model.Task {
 	tags := make([]string, len(t.Tags))
 	copy(tags, t.Tags)
 	notes := make([]string, len(t.Notes))
 	copy(notes, t.Notes)
-	return &store.Task{
+	return &model.Task{
 		ID:          t.ID,
 		Title:       t.Title,
 		Description: t.Description,
@@ -342,10 +342,10 @@ func copyTask(t *store.Task) *store.Task {
 	}
 }
 
-func copyAgent(a *store.Agent) *store.Agent {
+func copyAgent(a *model.Agent) *model.Agent {
 	caps := make([]string, len(a.Capabilities))
 	copy(caps, a.Capabilities)
-	return &store.Agent{
+	return &model.Agent{
 		ID:            a.ID,
 		Name:          a.Name,
 		Status:        a.Status,

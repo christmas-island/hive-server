@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 func TestAgentHeartbeat(t *testing.T) {
@@ -18,13 +18,13 @@ func TestAgentHeartbeat(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var agent store.Agent
+	var agent model.Agent
 	decodeJSON(t, resp, &agent)
 
 	if agent.ID != "jake-claw" {
 		t.Errorf("ID = %q, want jake-claw", agent.ID)
 	}
-	if agent.Status != store.AgentStatusOnline {
+	if agent.Status != model.AgentStatusOnline {
 		t.Errorf("Status = %q, want online", agent.Status)
 	}
 	if len(agent.Capabilities) != 2 {
@@ -41,9 +41,9 @@ func TestAgentHeartbeat_Idle(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var agent store.Agent
+	var agent model.Agent
 	decodeJSON(t, resp, &agent)
-	if agent.Status != store.AgentStatusIdle {
+	if agent.Status != model.AgentStatusIdle {
 		t.Errorf("Status = %q, want idle", agent.Status)
 	}
 }
@@ -57,9 +57,9 @@ func TestAgentHeartbeat_InvalidStatus_DefaultsOnline(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var agent store.Agent
+	var agent model.Agent
 	decodeJSON(t, resp, &agent)
-	if agent.Status != store.AgentStatusOnline {
+	if agent.Status != model.AgentStatusOnline {
 		t.Errorf("Status = %q, want online (default)", agent.Status)
 	}
 }
@@ -71,7 +71,7 @@ func TestAgentHeartbeat_Update(t *testing.T) {
 	r1 := request(t, srv, http.MethodPost, "/api/v1/agents/updagent/heartbeat", map[string]any{
 		"status": "online",
 	}, testToken, testAgent)
-	var a1 store.Agent
+	var a1 model.Agent
 	decodeJSON(t, r1, &a1)
 
 	// Second heartbeat with updated caps.
@@ -82,10 +82,10 @@ func TestAgentHeartbeat_Update(t *testing.T) {
 	if r2.StatusCode != http.StatusOK {
 		t.Fatalf("update status = %d, want 200", r2.StatusCode)
 	}
-	var a2 store.Agent
+	var a2 model.Agent
 	decodeJSON(t, r2, &a2)
 
-	if a2.Status != store.AgentStatusIdle {
+	if a2.Status != model.AgentStatusIdle {
 		t.Errorf("Status = %q, want idle", a2.Status)
 	}
 	if len(a2.Capabilities) != 1 || a2.Capabilities[0] != "new-cap" {
@@ -104,7 +104,7 @@ func TestAgentGet(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var agent store.Agent
+	var agent model.Agent
 	decodeJSON(t, resp, &agent)
 	if agent.ID != "myagent" {
 		t.Errorf("ID = %q, want myagent", agent.ID)
@@ -133,7 +133,7 @@ func TestAgentList(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var agents []store.Agent
+	var agents []model.Agent
 	decodeJSON(t, resp, &agents)
 	if len(agents) != 3 {
 		t.Errorf("len = %d, want 3", len(agents))
@@ -146,7 +146,7 @@ func TestAgentList_Empty(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var agents []store.Agent
+	var agents []model.Agent
 	decodeJSON(t, resp, &agents)
 	if agents == nil {
 		t.Error("expected non-nil agents slice")

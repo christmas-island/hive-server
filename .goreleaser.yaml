@@ -24,8 +24,8 @@ builds:
     goarch:
       - amd64
       - arm64
-    main: ./cmd/app
-    binary: app
+    main: ./cmd/hive-server
+    binary: hive-server
 
 archives:
   - formats:

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // TestTaskCreate tests POST /api/v1/tasks
@@ -21,7 +21,7 @@ func TestTaskCreate(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	var task store.Task
+	var task model.Task
 	decodeJSON(t, resp, &task)
 
 	if task.ID == "" {
@@ -30,7 +30,7 @@ func TestTaskCreate(t *testing.T) {
 	if task.Title != "build feature X" {
 		t.Errorf("Title = %q", task.Title)
 	}
-	if task.Status != store.TaskStatusOpen {
+	if task.Status != model.TaskStatusOpen {
 		t.Errorf("Status = %q, want open", task.Status)
 	}
 	if task.Creator != testAgent {
@@ -62,14 +62,14 @@ func TestTaskGet(t *testing.T) {
 
 	// Create.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "get me"}, testToken, testAgent)
-	var created store.Task
+	var created model.Task
 	decodeJSON(t, r1, &created)
 
 	resp := request(t, srv, http.MethodGet, "/api/v1/tasks/"+created.ID, nil, testToken, testAgent)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var got store.Task
+	var got model.Task
 	decodeJSON(t, resp, &got)
 	if got.ID != created.ID {
 		t.Errorf("ID = %q, want %q", got.ID, created.ID)
@@ -96,7 +96,7 @@ func TestTaskList(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var tasks []store.Task
+	var tasks []model.Task
 	decodeJSON(t, resp, &tasks)
 	if len(tasks) != 3 {
 		t.Errorf("len = %d, want 3", len(tasks))
@@ -108,7 +108,7 @@ func TestTaskList_FilterStatus(t *testing.T) {
 
 	// Create two tasks.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "t1"}, testToken, testAgent)
-	var t1 store.Task
+	var t1 model.Task
 	decodeJSON(t, r1, &t1)
 	request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "t2"}, testToken, testAgent).Body.Close()
 
@@ -121,7 +121,7 @@ func TestTaskList_FilterStatus(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var tasks []store.Task
+	var tasks []model.Task
 	decodeJSON(t, resp, &tasks)
 	if len(tasks) != 1 {
 		t.Errorf("open len = %d, want 1", len(tasks))
@@ -132,7 +132,7 @@ func TestTaskUpdate_StatusTransition(t *testing.T) {
 	srv := newTestServer(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "transit"}, testToken, testAgent)
-	var task store.Task
+	var task model.Task
 	decodeJSON(t, r1, &task)
 
 	// Claim.
@@ -142,9 +142,9 @@ func TestTaskUpdate_StatusTransition(t *testing.T) {
 	if r2.StatusCode != http.StatusOK {
 		t.Fatalf("claim status = %d, want 200", r2.StatusCode)
 	}
-	var claimed store.Task
+	var claimed model.Task
 	decodeJSON(t, r2, &claimed)
-	if claimed.Status != store.TaskStatusClaimed {
+	if claimed.Status != model.TaskStatusClaimed {
 		t.Errorf("Status = %q, want claimed", claimed.Status)
 	}
 
@@ -171,7 +171,7 @@ func TestTaskUpdate_InvalidTransition(t *testing.T) {
 	srv := newTestServer(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "bad-transit"}, testToken, testAgent)
-	var task store.Task
+	var task model.Task
 	decodeJSON(t, r1, &task)
 
 	// open → done (invalid)
@@ -188,7 +188,7 @@ func TestTaskUpdate_AddNote(t *testing.T) {
 	srv := newTestServer(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "noted"}, testToken, testAgent)
-	var task store.Task
+	var task model.Task
 	decodeJSON(t, r1, &task)
 
 	// Add note.
@@ -198,7 +198,7 @@ func TestTaskUpdate_AddNote(t *testing.T) {
 	if r2.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", r2.StatusCode)
 	}
-	var updated store.Task
+	var updated model.Task
 	decodeJSON(t, r2, &updated)
 	if len(updated.Notes) != 1 || updated.Notes[0] != "progress update" {
 		t.Errorf("Notes = %v", updated.Notes)
@@ -218,7 +218,7 @@ func TestTaskDelete(t *testing.T) {
 	srv := newTestServer(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "del me"}, testToken, testAgent)
-	var task store.Task
+	var task model.Task
 	decodeJSON(t, r1, &task)
 
 	resp := request(t, srv, http.MethodDelete, "/api/v1/tasks/"+task.ID, nil, testToken, testAgent)

@@ -7,7 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // --- Task input/output types ---
@@ -23,7 +23,7 @@ type taskCreateInput struct {
 }
 
 type taskOutput struct {
-	Body *store.Task
+	Body *model.Task
 }
 
 type taskGetInput struct {
@@ -39,14 +39,14 @@ type taskListInput struct {
 }
 
 type taskListOutput struct {
-	Body []*store.Task
+	Body []*model.Task
 }
 
 type taskUpdateInput struct {
 	ID       string `path:"id" doc:"Task ID"`
 	XAgentID string `header:"X-Agent-ID" doc:"Calling agent identifier"`
 	Body     struct {
-		Status   *store.TaskStatus `json:"status,omitempty" doc:"New task status"`
+		Status   *model.TaskStatus `json:"status,omitempty" doc:"New task status"`
 		Assignee *string           `json:"assignee,omitempty" doc:"New assignee"`
 		Note     *string           `json:"note,omitempty" doc:"Append a note"`
 	}
@@ -61,7 +61,7 @@ type taskDeleteOutput struct{}
 // --- Handlers ---
 
 func (a *API) taskCreate(ctx context.Context, input *taskCreateInput) (*taskOutput, error) {
-	t := &store.Task{
+	t := &model.Task{
 		Title:       input.Body.Title,
 		Description: input.Body.Description,
 		Priority:    input.Body.Priority,
@@ -77,7 +77,7 @@ func (a *API) taskCreate(ctx context.Context, input *taskCreateInput) (*taskOutp
 
 func (a *API) taskGet(ctx context.Context, input *taskGetInput) (*taskOutput, error) {
 	t, err := a.store.GetTask(ctx, input.ID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("task not found")
 	}
 	if err != nil {
@@ -87,7 +87,7 @@ func (a *API) taskGet(ctx context.Context, input *taskGetInput) (*taskOutput, er
 }
 
 func (a *API) taskList(ctx context.Context, input *taskListInput) (*taskListOutput, error) {
-	f := store.TaskFilter{
+	f := model.TaskFilter{
 		Status:   input.Status,
 		Assignee: input.Assignee,
 		Creator:  input.Creator,
@@ -99,23 +99,23 @@ func (a *API) taskList(ctx context.Context, input *taskListInput) (*taskListOutp
 		return nil, huma.Error500InternalServerError("failed to list tasks")
 	}
 	if tasks == nil {
-		tasks = []*store.Task{}
+		tasks = []*model.Task{}
 	}
 	return &taskListOutput{Body: tasks}, nil
 }
 
 func (a *API) taskUpdate(ctx context.Context, input *taskUpdateInput) (*taskOutput, error) {
-	upd := store.TaskUpdate{
+	upd := model.TaskUpdate{
 		Status:   input.Body.Status,
 		Assignee: input.Body.Assignee,
 		Note:     input.Body.Note,
 		AgentID:  input.XAgentID,
 	}
 	result, err := a.store.UpdateTask(ctx, input.ID, upd)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("task not found")
 	}
-	if errors.Is(err, store.ErrInvalidTransition) {
+	if errors.Is(err, model.ErrInvalidTransition) {
 		return nil, huma.Error422UnprocessableEntity("the requested status transition is not allowed")
 	}
 	if err != nil {
@@ -126,7 +126,7 @@ func (a *API) taskUpdate(ctx context.Context, input *taskUpdateInput) (*taskOutp
 
 func (a *API) taskDelete(ctx context.Context, input *taskDeleteInput) (*taskDeleteOutput, error) {
 	err := a.store.DeleteTask(ctx, input.ID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("task not found")
 	}
 	if err != nil {
