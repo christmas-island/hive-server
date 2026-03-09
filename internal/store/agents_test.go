@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
-	"github.com/christmas-island/hive-server/internal/store"
 )
 
 func TestHeartbeat_Register(t *testing.T) {
@@ -83,7 +82,7 @@ func TestGetAgent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.Heartbeat(ctx, "get-agent", []string{}, store.AgentStatusOnline)
+	_, err := s.Heartbeat(ctx, "get-agent", []string{}, model.AgentStatusOnline)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -100,7 +99,7 @@ func TestGetAgent(t *testing.T) {
 func TestGetAgent_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.GetAgent(context.Background(), "no-such")
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }

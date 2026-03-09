@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/christmas-island/hive-server/internal/model"
-	"github.com/christmas-island/hive-server/internal/store"
 )
 
 func TestMemoryUpsert_Create(t *testing.T) {
@@ -84,7 +83,7 @@ func TestMemoryUpsert_OptimisticConflict(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ErrConflict, got nil")
 	}
-	if err != store.ErrConflict {
+	if err != model.ErrConflict {
 		t.Errorf("expected ErrConflict, got %v", err)
 	}
 }
@@ -112,7 +111,7 @@ func TestMemoryGet_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := s.GetMemory(ctx, "no.such.key")
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -191,7 +190,7 @@ func TestMemoryDelete(t *testing.T) {
 	}
 
 	_, err = s.GetMemory(ctx, "del.key")
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound after delete, got %v", err)
 	}
 }
@@ -201,7 +200,7 @@ func TestMemoryDelete_NotFound(t *testing.T) {
 	ctx := context.Background()
 
 	err := s.DeleteMemory(ctx, "ghost.key")
-	if err != store.ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
