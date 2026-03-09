@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # script/test — Run unit tests (no external services required).
+# Store integration tests are gated behind //go:build integration
+# and excluded by default. Use script/integration/test for those.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

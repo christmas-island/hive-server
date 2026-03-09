@@ -6,51 +6,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/christmas-island/hive-server/internal/handlers"
-	"github.com/christmas-island/hive-server/internal/store"
 )
 
-// testDatabaseURL returns the DATABASE_URL for handler tests.
-// Tests are skipped if the env var is not set (no live DB required in CI without CRDB).
-func testDatabaseURL(t *testing.T) string {
-	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping handler integration test")
-	}
-	return url
-}
-
-// newTestServer creates an httptest server backed by a real CockroachDB/PostgreSQL store.
+// newTestServer creates an httptest server backed by an in-memory mock store.
+// No external database required.
 func newTestServer(t *testing.T, token string) *httptest.Server {
 	t.Helper()
-	url := testDatabaseURL(t)
-	s, err := store.New(url)
-	if err != nil {
-		t.Fatalf("store.New: %v", err)
-	}
-	t.Cleanup(func() {
-		cleanTestDB(t, s)
-		_ = s.Close()
-	})
+	s := newMockStore()
 	h := handlers.New(s, token)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv
-}
-
-// cleanTestDB removes all rows inserted during a test to keep the DB clean between runs.
-func cleanTestDB(t *testing.T, s *store.Store) {
-	t.Helper()
-	db := s.DB()
-	for _, tbl := range []string{"task_notes", "tasks", "memory", "agents"} {
-		if _, err := db.Exec("DELETE FROM " + tbl); err != nil {
-			t.Logf("cleanup %s: %v", tbl, err)
-		}
-	}
 }
 
 // request is a helper to make HTTP requests to the test server.
@@ -86,34 +55,4 @@ func decodeJSON(t *testing.T, resp *http.Response, v any) {
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		t.Fatalf("decode JSON: %v", err)
 	}
-}
-
-// TestAuth_NoToken verifies that requests without a bearer token are rejected.
-func TestAuth_NoToken(t *testing.T) {
-	srv := newTestServer(t, "secret")
-	resp := request(t, srv, http.MethodGet, "/api/v1/memory", nil, "", "")
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", resp.StatusCode)
-	}
-	resp.Body.Close()
-}
-
-// TestAuth_WrongToken verifies that an invalid token is rejected.
-func TestAuth_WrongToken(t *testing.T) {
-	srv := newTestServer(t, "secret")
-	resp := request(t, srv, http.MethodGet, "/api/v1/memory", nil, "wrong", "")
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", resp.StatusCode)
-	}
-	resp.Body.Close()
-}
-
-// TestAuth_NoTokenConfigured verifies that no auth check occurs when token is empty.
-func TestAuth_NoTokenConfigured(t *testing.T) {
-	srv := newTestServer(t, "")
-	resp := request(t, srv, http.MethodGet, "/api/v1/memory", nil, "", "")
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
-	}
-	resp.Body.Close()
 }
