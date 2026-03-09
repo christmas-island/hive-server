@@ -6,12 +6,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/christmas-island/hive-server/internal/model"
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
-func makeTask(s *store.Store, t *testing.T, title string) *store.Task {
+func makeTask(s *store.Store, t *testing.T, title string) *model.Task {
 	t.Helper()
-	task, err := s.CreateTask(context.Background(), &store.Task{
+	task, err := s.CreateTask(context.Background(), &model.Task{
 		Title:   title,
 		Creator: "agent-test",
 		Tags:    []string{},
@@ -29,8 +30,8 @@ func TestTaskCreate(t *testing.T) {
 	if task.ID == "" {
 		t.Error("expected non-empty ID")
 	}
-	if task.Status != store.TaskStatusOpen {
-		t.Errorf("Status = %q, want %q", task.Status, store.TaskStatusOpen)
+	if task.Status != model.TaskStatusOpen {
+		t.Errorf("Status = %q, want %q", task.Status, model.TaskStatusOpen)
 	}
 	if task.Notes == nil {
 		t.Error("Notes should not be nil")
@@ -43,7 +44,7 @@ func TestTaskCreate(t *testing.T) {
 func TestTaskCreate_TitleRequired(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	_, err := s.CreateTask(ctx, &store.Task{Creator: "a"})
+	_, err := s.CreateTask(ctx, &model.Task{Creator: "a"})
 	// SQLite won't enforce NOT NULL on title from Go side directly in this impl,
 	// but the handler validates. For the store, an empty title is stored.
 	// This test verifies the call doesn't panic.
@@ -82,7 +83,7 @@ func TestTaskList(t *testing.T) {
 	makeTask(s, t, "task-2")
 	makeTask(s, t, "task-3")
 
-	tasks, err := s.ListTasks(ctx, store.TaskFilter{Limit: 10})
+	tasks, err := s.ListTasks(ctx, model.TaskFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -100,22 +101,22 @@ func TestTaskList_FilterStatus(t *testing.T) {
 
 	// Claim t2.
 	assignee := "agent-2"
-	claimed := store.TaskStatusClaimed
-	_, err := s.UpdateTask(ctx, t2.ID, store.TaskUpdate{Status: &claimed, Assignee: &assignee})
+	claimed := model.TaskStatusClaimed
+	_, err := s.UpdateTask(ctx, t2.ID, model.TaskUpdate{Status: &claimed, Assignee: &assignee})
 	if err != nil {
 		t.Fatalf("claim task: %v", err)
 	}
 
 	_ = t1
 
-	open, err := s.ListTasks(ctx, store.TaskFilter{Status: "open"})
+	open, err := s.ListTasks(ctx, model.TaskFilter{Status: "open"})
 	if err != nil {
 		t.Fatalf("list open: %v", err)
 	}
 	if len(open) != 1 {
 		t.Errorf("open len = %d, want 1", len(open))
 	}
-	if open[0].Status != store.TaskStatusOpen {
+	if open[0].Status != model.TaskStatusOpen {
 		t.Errorf("status = %q, want open", open[0].Status)
 	}
 }
@@ -128,13 +129,13 @@ func TestTaskList_FilterAssignee(t *testing.T) {
 	makeTask(s, t, "unassigned")
 
 	assignee := "jake"
-	status := store.TaskStatusClaimed
-	_, err := s.UpdateTask(ctx, t1.ID, store.TaskUpdate{Status: &status, Assignee: &assignee})
+	status := model.TaskStatusClaimed
+	_, err := s.UpdateTask(ctx, t1.ID, model.TaskUpdate{Status: &status, Assignee: &assignee})
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
 
-	tasks, err := s.ListTasks(ctx, store.TaskFilter{Assignee: "jake"})
+	tasks, err := s.ListTasks(ctx, model.TaskFilter{Assignee: "jake"})
 	if err != nil {
 		t.Fatalf("list by assignee: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestTaskUpdate_Note(t *testing.T) {
 
 	task := makeTask(s, t, "noted")
 	note := "first note"
-	updated, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Note: &note, AgentID: "a1"})
+	updated, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Note: &note, AgentID: "a1"})
 	if err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestTaskUpdate_MultipleNotes(t *testing.T) {
 	task := makeTask(s, t, "multi-noted")
 	for _, n := range []string{"note-1", "note-2", "note-3"} {
 		note := n
-		_, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Note: &note})
+		_, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Note: &note})
 		if err != nil {
 			t.Fatalf("add note %q: %v", n, err)
 		}
@@ -208,23 +209,23 @@ func TestTaskUpdate_MultipleNotes(t *testing.T) {
 // TestStateMachine exercises all defined valid transitions.
 func TestStateMachine_ValidTransitions(t *testing.T) {
 	type transition struct {
-		from store.TaskStatus
-		to   store.TaskStatus
+		from model.TaskStatus
+		to   model.TaskStatus
 	}
 
 	valid := []transition{
-		{store.TaskStatusOpen, store.TaskStatusClaimed},
-		{store.TaskStatusOpen, store.TaskStatusCancelled},
-		{store.TaskStatusClaimed, store.TaskStatusOpen},
-		{store.TaskStatusClaimed, store.TaskStatusInProgress},
-		{store.TaskStatusClaimed, store.TaskStatusCancelled},
-		{store.TaskStatusInProgress, store.TaskStatusDone},
-		{store.TaskStatusInProgress, store.TaskStatusFailed},
-		{store.TaskStatusInProgress, store.TaskStatusOpen},
+		{model.TaskStatusOpen, model.TaskStatusClaimed},
+		{model.TaskStatusOpen, model.TaskStatusCancelled},
+		{model.TaskStatusClaimed, model.TaskStatusOpen},
+		{model.TaskStatusClaimed, model.TaskStatusInProgress},
+		{model.TaskStatusClaimed, model.TaskStatusCancelled},
+		{model.TaskStatusInProgress, model.TaskStatusDone},
+		{model.TaskStatusInProgress, model.TaskStatusFailed},
+		{model.TaskStatusInProgress, model.TaskStatusOpen},
 	}
 
 	for _, tr := range valid {
-		if !store.IsValidTransition(tr.from, tr.to) {
+		if !model.IsValidTransition(tr.from, tr.to) {
 			t.Errorf("expected valid transition %q→%q", tr.from, tr.to)
 		}
 	}
@@ -232,22 +233,22 @@ func TestStateMachine_ValidTransitions(t *testing.T) {
 
 func TestStateMachine_InvalidTransitions(t *testing.T) {
 	type transition struct {
-		from store.TaskStatus
-		to   store.TaskStatus
+		from model.TaskStatus
+		to   model.TaskStatus
 	}
 
 	invalid := []transition{
-		{store.TaskStatusOpen, store.TaskStatusInProgress},
-		{store.TaskStatusOpen, store.TaskStatusDone},
-		{store.TaskStatusOpen, store.TaskStatusFailed},
-		{store.TaskStatusDone, store.TaskStatusOpen},
-		{store.TaskStatusFailed, store.TaskStatusOpen},
-		{store.TaskStatusCancelled, store.TaskStatusOpen},
-		{store.TaskStatusInProgress, store.TaskStatusClaimed},
+		{model.TaskStatusOpen, model.TaskStatusInProgress},
+		{model.TaskStatusOpen, model.TaskStatusDone},
+		{model.TaskStatusOpen, model.TaskStatusFailed},
+		{model.TaskStatusDone, model.TaskStatusOpen},
+		{model.TaskStatusFailed, model.TaskStatusOpen},
+		{model.TaskStatusCancelled, model.TaskStatusOpen},
+		{model.TaskStatusInProgress, model.TaskStatusClaimed},
 	}
 
 	for _, tr := range invalid {
-		if store.IsValidTransition(tr.from, tr.to) {
+		if model.IsValidTransition(tr.from, tr.to) {
 			t.Errorf("expected invalid transition %q→%q", tr.from, tr.to)
 		}
 	}
@@ -258,8 +259,8 @@ func TestUpdateTask_InvalidTransition(t *testing.T) {
 	ctx := context.Background()
 
 	task := makeTask(s, t, "invalid transition")
-	done := store.TaskStatusDone
-	_, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Status: &done})
+	done := model.TaskStatusDone
+	_, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Status: &done})
 	if err != store.ErrInvalidTransition {
 		t.Errorf("expected ErrInvalidTransition, got %v", err)
 	}
@@ -273,12 +274,12 @@ func TestUpdateTask_FullFlow(t *testing.T) {
 
 	// open → claimed
 	assignee := "worker"
-	claimed := store.TaskStatusClaimed
-	t1, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Status: &claimed, Assignee: &assignee})
+	claimed := model.TaskStatusClaimed
+	t1, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Status: &claimed, Assignee: &assignee})
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	if t1.Status != store.TaskStatusClaimed {
+	if t1.Status != model.TaskStatusClaimed {
 		t.Errorf("status = %q, want claimed", t1.Status)
 	}
 	if t1.Assignee != "worker" {
@@ -286,22 +287,22 @@ func TestUpdateTask_FullFlow(t *testing.T) {
 	}
 
 	// claimed → in_progress
-	inProg := store.TaskStatusInProgress
-	t2, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Status: &inProg})
+	inProg := model.TaskStatusInProgress
+	t2, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Status: &inProg})
 	if err != nil {
 		t.Fatalf("in_progress: %v", err)
 	}
-	if t2.Status != store.TaskStatusInProgress {
+	if t2.Status != model.TaskStatusInProgress {
 		t.Errorf("status = %q, want in_progress", t2.Status)
 	}
 
 	// in_progress → done
-	done := store.TaskStatusDone
-	t3, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Status: &done})
+	done := model.TaskStatusDone
+	t3, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Status: &done})
 	if err != nil {
 		t.Fatalf("done: %v", err)
 	}
-	if t3.Status != store.TaskStatusDone {
+	if t3.Status != model.TaskStatusDone {
 		t.Errorf("status = %q, want done", t3.Status)
 	}
 }
@@ -309,7 +310,7 @@ func TestUpdateTask_FullFlow(t *testing.T) {
 func TestUpdateTask_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	note := "hi"
-	_, err := s.UpdateTask(context.Background(), "ghost", store.TaskUpdate{Note: &note})
+	_, err := s.UpdateTask(context.Background(), "ghost", model.TaskUpdate{Note: &note})
 	if err != store.ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -321,7 +322,7 @@ func TestTaskNotesCascadeDelete(t *testing.T) {
 
 	task := makeTask(s, t, "cascaded")
 	note := "will be deleted"
-	_, err := s.UpdateTask(ctx, task.ID, store.TaskUpdate{Note: &note})
+	_, err := s.UpdateTask(ctx, task.ID, model.TaskUpdate{Note: &note})
 	if err != nil {
 		t.Fatalf("add note: %v", err)
 	}

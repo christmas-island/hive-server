@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/christmas-island/hive-server/internal/model"
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
@@ -14,14 +15,14 @@ func TestHeartbeat_Register(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	agent, err := s.Heartbeat(ctx, "agent-1", []string{"memory", "tasks"}, store.AgentStatusOnline)
+	agent, err := s.Heartbeat(ctx, "agent-1", []string{"memory", "tasks"}, model.AgentStatusOnline)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
 	if agent.ID != "agent-1" {
 		t.Errorf("ID = %q, want agent-1", agent.ID)
 	}
-	if agent.Status != store.AgentStatusOnline {
+	if agent.Status != model.AgentStatusOnline {
 		t.Errorf("Status = %q, want online", agent.Status)
 	}
 	if len(agent.Capabilities) != 2 {
@@ -39,19 +40,19 @@ func TestHeartbeat_Update(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	a1, err := s.Heartbeat(ctx, "agent-upd", []string{"a"}, store.AgentStatusOnline)
+	a1, err := s.Heartbeat(ctx, "agent-upd", []string{"a"}, model.AgentStatusOnline)
 	if err != nil {
 		t.Fatalf("first heartbeat: %v", err)
 	}
 
 	time.Sleep(2 * time.Millisecond)
 
-	a2, err := s.Heartbeat(ctx, "agent-upd", []string{"a", "b"}, store.AgentStatusIdle)
+	a2, err := s.Heartbeat(ctx, "agent-upd", []string{"a", "b"}, model.AgentStatusIdle)
 	if err != nil {
 		t.Fatalf("second heartbeat: %v", err)
 	}
 
-	if a2.Status != store.AgentStatusIdle {
+	if a2.Status != model.AgentStatusIdle {
 		t.Errorf("Status = %q, want idle", a2.Status)
 	}
 	if len(a2.Capabilities) != 2 {
@@ -69,7 +70,7 @@ func TestHeartbeat_Update(t *testing.T) {
 
 func TestHeartbeat_NilCapabilities(t *testing.T) {
 	s := newTestStore(t)
-	agent, err := s.Heartbeat(context.Background(), "nocaps", nil, store.AgentStatusOnline)
+	agent, err := s.Heartbeat(context.Background(), "nocaps", nil, model.AgentStatusOnline)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -109,7 +110,7 @@ func TestListAgents(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{"a1", "a2", "a3"} {
-		_, err := s.Heartbeat(ctx, id, nil, store.AgentStatusOnline)
+		_, err := s.Heartbeat(ctx, id, nil, model.AgentStatusOnline)
 		if err != nil {
 			t.Fatalf("Heartbeat %q: %v", id, err)
 		}
@@ -138,7 +139,7 @@ func TestAgentOfflineThreshold(t *testing.T) {
 	ctx := context.Background()
 
 	// Register agent with a stale heartbeat by directly manipulating the DB.
-	_, err := s.Heartbeat(ctx, "stale-agent", nil, store.AgentStatusOnline)
+	_, err := s.Heartbeat(ctx, "stale-agent", nil, model.AgentStatusOnline)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -155,7 +156,7 @@ func TestAgentOfflineThreshold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAgent: %v", err)
 	}
-	if agent.Status != store.AgentStatusOffline {
+	if agent.Status != model.AgentStatusOffline {
 		t.Errorf("Status = %q, want offline (stale heartbeat)", agent.Status)
 	}
 }
