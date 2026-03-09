@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 const testToken = "test-token"
@@ -23,7 +23,7 @@ func TestMemoryUpsert_Create(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 
-	var entry store.MemoryEntry
+	var entry model.MemoryEntry
 	decodeJSON(t, resp, &entry)
 
 	if entry.Key != "foo.bar" {
@@ -47,7 +47,7 @@ func TestMemoryUpsert_Update(t *testing.T) {
 	r1 := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
 		"key": "upd.key", "value": "v1",
 	}, testToken, testAgent)
-	var e1 store.MemoryEntry
+	var e1 model.MemoryEntry
 	decodeJSON(t, r1, &e1)
 
 	// Update with correct version.
@@ -57,7 +57,7 @@ func TestMemoryUpsert_Update(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("update status = %d, want 200", resp.StatusCode)
 	}
-	var e2 store.MemoryEntry
+	var e2 model.MemoryEntry
 	decodeJSON(t, resp, &e2)
 	if e2.Version != 2 {
 		t.Errorf("Version = %d, want 2", e2.Version)
@@ -114,7 +114,7 @@ func TestMemoryGet(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var e store.MemoryEntry
+	var e model.MemoryEntry
 	decodeJSON(t, resp, &e)
 	if e.Value != "data" {
 		t.Errorf("Value = %q, want data", e.Value)
@@ -144,7 +144,7 @@ func TestMemoryList(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var entries []store.MemoryEntry
+	var entries []model.MemoryEntry
 	decodeJSON(t, resp, &entries)
 	if len(entries) != 2 {
 		t.Errorf("len = %d, want 2", len(entries))
@@ -165,7 +165,7 @@ func TestMemoryList_ByTag(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var entries []store.MemoryEntry
+	var entries []model.MemoryEntry
 	decodeJSON(t, resp, &entries)
 	if len(entries) != 1 {
 		t.Errorf("len = %d, want 1", len(entries))

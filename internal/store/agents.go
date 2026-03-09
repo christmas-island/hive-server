@@ -7,33 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"time"
-)
 
-// AgentStatus represents an agent's presence state.
-type AgentStatus string
-
-const (
-	AgentStatusOnline  AgentStatus = "online"
-	AgentStatusIdle    AgentStatus = "idle"
-	AgentStatusOffline AgentStatus = "offline"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // offlineThreshold is the duration after which an agent is considered offline.
 const offlineThreshold = 5 * time.Minute
 
-// Agent represents a registered agent.
-type Agent struct {
-	ID            string      `json:"id"`
-	Name          string      `json:"name"`
-	Status        AgentStatus `json:"status"`
-	Capabilities  []string    `json:"capabilities"`
-	LastHeartbeat time.Time   `json:"last_heartbeat"`
-	RegisteredAt  time.Time   `json:"registered_at"`
-}
-
 // Heartbeat upserts an agent record, updating its last_heartbeat and status.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
-func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string, status AgentStatus) (*Agent, error) {
+func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error) {
 	now := time.Now().UTC()
 	capsJSON, err := json.Marshal(capabilities)
 	if err != nil {
@@ -63,7 +46,7 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 }
 
 // GetAgent retrieves a single agent by ID, applying the offline threshold.
-func (s *Store) GetAgent(ctx context.Context, id string) (*Agent, error) {
+func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
 		id,
@@ -72,7 +55,7 @@ func (s *Store) GetAgent(ctx context.Context, id string) (*Agent, error) {
 }
 
 // ListAgents returns all known agents, computing presence from last_heartbeat.
-func (s *Store) ListAgents(ctx context.Context) ([]*Agent, error) {
+func (s *Store) ListAgents(ctx context.Context) ([]*model.Agent, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
 	)
@@ -81,7 +64,7 @@ func (s *Store) ListAgents(ctx context.Context) ([]*Agent, error) {
 	}
 	defer rows.Close()
 
-	var agents []*Agent
+	var agents []*model.Agent
 	for rows.Next() {
 		a, err := scanAgentRows(rows)
 		if err != nil {
@@ -92,12 +75,12 @@ func (s *Store) ListAgents(ctx context.Context) ([]*Agent, error) {
 	return agents, rows.Err()
 }
 
-func scanAgentRow(row *sql.Row) (*Agent, error) {
-	var a Agent
+func scanAgentRow(row *sql.Row) (*model.Agent, error) {
+	var a model.Agent
 	var capsRaw, hbStr, regStr string
 	err := row.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, model.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan agent: %w", err)
@@ -105,8 +88,8 @@ func scanAgentRow(row *sql.Row) (*Agent, error) {
 	return finishAgentScan(&a, capsRaw, hbStr, regStr)
 }
 
-func scanAgentRows(rows *sql.Rows) (*Agent, error) {
-	var a Agent
+func scanAgentRows(rows *sql.Rows) (*model.Agent, error) {
+	var a model.Agent
 	var capsRaw, hbStr, regStr string
 	if err := rows.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr); err != nil {
 		return nil, fmt.Errorf("scan agent row: %w", err)
@@ -114,7 +97,7 @@ func scanAgentRows(rows *sql.Rows) (*Agent, error) {
 	return finishAgentScan(&a, capsRaw, hbStr, regStr)
 }
 
-func finishAgentScan(a *Agent, capsRaw, hbStr, regStr string) (*Agent, error) {
+func finishAgentScan(a *model.Agent, capsRaw, hbStr, regStr string) (*model.Agent, error) {
 	if err := json.Unmarshal([]byte(capsRaw), &a.Capabilities); err != nil {
 		a.Capabilities = []string{}
 	}
@@ -133,8 +116,8 @@ func finishAgentScan(a *Agent, capsRaw, hbStr, regStr string) (*Agent, error) {
 	}
 
 	// Apply offline threshold override.
-	if time.Since(a.LastHeartbeat) > offlineThreshold && a.Status != AgentStatusOffline {
-		a.Status = AgentStatusOffline
+	if time.Since(a.LastHeartbeat) > offlineThreshold && a.Status != model.AgentStatusOffline {
+		a.Status = model.AgentStatusOffline
 	}
 	return a, nil
 }

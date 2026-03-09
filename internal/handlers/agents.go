@@ -7,7 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // --- Agent input/output types ---
@@ -21,11 +21,11 @@ type agentHeartbeatInput struct {
 }
 
 type agentOutput struct {
-	Body *store.Agent
+	Body *model.Agent
 }
 
 type agentListOutput struct {
-	Body []*store.Agent
+	Body []*model.Agent
 }
 
 type agentGetInput struct {
@@ -35,12 +35,12 @@ type agentGetInput struct {
 // --- Handlers ---
 
 func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*agentOutput, error) {
-	status := store.AgentStatus(input.Body.Status)
+	status := model.AgentStatus(input.Body.Status)
 	switch status {
-	case store.AgentStatusOnline, store.AgentStatusIdle:
+	case model.AgentStatusOnline, model.AgentStatusIdle:
 		// valid
 	default:
-		status = store.AgentStatusOnline
+		status = model.AgentStatusOnline
 	}
 
 	agent, err := a.store.Heartbeat(ctx, input.ID, input.Body.Capabilities, status)
@@ -56,14 +56,14 @@ func (a *API) agentList(ctx context.Context, _ *struct{}) (*agentListOutput, err
 		return nil, huma.Error500InternalServerError("failed to list agents")
 	}
 	if agents == nil {
-		agents = []*store.Agent{}
+		agents = []*model.Agent{}
 	}
 	return &agentListOutput{Body: agents}, nil
 }
 
 func (a *API) agentGet(ctx context.Context, input *agentGetInput) (*agentOutput, error) {
 	agent, err := a.store.GetAgent(ctx, input.ID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("agent not found")
 	}
 	if err != nil {

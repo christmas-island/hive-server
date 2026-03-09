@@ -8,91 +8,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/christmas-island/hive-server/internal/model"
 	"github.com/google/uuid"
 )
 
-// TaskStatus represents the lifecycle state of a task.
-type TaskStatus string
 
-const (
-	TaskStatusOpen       TaskStatus = "open"
-	TaskStatusClaimed    TaskStatus = "claimed"
-	TaskStatusInProgress TaskStatus = "in_progress"
-	TaskStatusDone       TaskStatus = "done"
-	TaskStatusFailed     TaskStatus = "failed"
-	TaskStatusCancelled  TaskStatus = "cancelled"
-)
-
-// ErrInvalidTransition is returned when a state transition is not allowed.
-var ErrInvalidTransition = errors.New("invalid status transition")
-
-// validTransitions defines the allowed state machine moves.
-var validTransitions = map[TaskStatus]map[TaskStatus]bool{
-	TaskStatusOpen: {
-		TaskStatusClaimed:   true,
-		TaskStatusCancelled: true,
-	},
-	TaskStatusClaimed: {
-		TaskStatusOpen:       true, // unclaim
-		TaskStatusInProgress: true,
-		TaskStatusCancelled:  true,
-	},
-	TaskStatusInProgress: {
-		TaskStatusDone:   true,
-		TaskStatusFailed: true,
-		TaskStatusOpen:   true, // unblock/reassign
-	},
-}
-
-// IsValidTransition reports whether moving from src to dst is allowed.
-func IsValidTransition(src, dst TaskStatus) bool {
-	if src == dst {
-		return true
-	}
-	allowed, ok := validTransitions[src]
-	if !ok {
-		return false
-	}
-	return allowed[dst]
-}
-
-// Task is the full task record including appended notes.
-type Task struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Status      TaskStatus `json:"status"`
-	Creator     string     `json:"creator"`
-	Assignee    string     `json:"assignee"`
-	Priority    int        `json:"priority"`
-	Tags        []string   `json:"tags"`
-	Notes       []string   `json:"notes"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-}
-
-// TaskFilter holds optional filter parameters for listing tasks.
-type TaskFilter struct {
-	Status   string
-	Assignee string
-	Creator  string
-	Limit    int
-	Offset   int
-}
-
-// TaskUpdate carries the fields that can be changed via PATCH.
-type TaskUpdate struct {
-	Status   *TaskStatus
-	Assignee *string
-	Note     *string // appended if non-nil
-	AgentID  string  // who is making the change (for note attribution)
-}
 
 // CreateTask inserts a new task and returns it.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
-func (s *Store) CreateTask(ctx context.Context, t *Task) (*Task, error) {
+func (s *Store) CreateTask(ctx context.Context, t *model.Task) (*model.Task, error) {
 	t.ID = uuid.New().String()
-	t.Status = TaskStatusOpen
+	t.Status = model.TaskStatusOpen
 	now := time.Now().UTC()
 	t.CreatedAt = now
 	t.UpdatedAt = now
@@ -124,7 +50,7 @@ func (s *Store) CreateTask(ctx context.Context, t *Task) (*Task, error) {
 }
 
 // GetTask retrieves a task by ID, including its notes.
-func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
+func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
          FROM tasks WHERE id = $1`,
@@ -141,7 +67,7 @@ func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 }
 
 // ListTasks returns tasks matching the filter.
-func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
+func (s *Store) ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Task, error) {
 	q := `SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
           FROM tasks WHERE 1=1`
 	args := []any{}
@@ -177,7 +103,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}
 
-	var tasks []*Task
+	var tasks []*model.Task
 	for rows.Next() {
 		t, err := scanTaskRows(rows)
 		if err != nil {
@@ -202,10 +128,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
 
 // UpdateTask applies a TaskUpdate to a task, enforcing state machine rules.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
-func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Task, error) {
+func (s *Store) UpdateTask(ctx context.Context, id string, upd model.TaskUpdate) (*model.Task, error) {
 	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
 		// Fetch current task.
-		var t Task
+		var t model.Task
 		var tagsRaw, createdStr, updatedStr string
 		err := tx.QueryRowContext(ctx,
 			`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
@@ -213,7 +139,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Tas
 		).Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
 			&t.Priority, &tagsRaw, &createdStr, &updatedStr)
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
+			return model.ErrNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("fetch task: %w", err)
@@ -223,8 +149,8 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd TaskUpdate) (*Tas
 
 		// Apply status transition.
 		if upd.Status != nil && *upd.Status != t.Status {
-			if !IsValidTransition(t.Status, *upd.Status) {
-				return ErrInvalidTransition
+			if !model.IsValidTransition(t.Status, *upd.Status) {
+				return model.ErrInvalidTransition
 			}
 			t.Status = *upd.Status
 		}
@@ -269,14 +195,14 @@ func (s *Store) DeleteTask(ctx context.Context, id string) error {
 		}
 		n, _ := res.RowsAffected()
 		if n == 0 {
-			return ErrNotFound
+			return model.ErrNotFound
 		}
 		return nil
 	})
 }
 
 // loadTaskNotes fetches all notes for a task and attaches them.
-func (s *Store) loadTaskNotes(ctx context.Context, t *Task) error {
+func (s *Store) loadTaskNotes(ctx context.Context, t *model.Task) error {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT note FROM task_notes WHERE task_id = $1 ORDER BY created_at ASC, id ASC`,
 		t.ID,
@@ -298,13 +224,13 @@ func (s *Store) loadTaskNotes(ctx context.Context, t *Task) error {
 }
 
 // scanTaskRow scans a *sql.Row into a Task.
-func scanTaskRow(row *sql.Row) (*Task, error) {
-	var t Task
+func scanTaskRow(row *sql.Row) (*model.Task, error) {
+	var t model.Task
 	var tagsRaw, createdStr, updatedStr string
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
 		&t.Priority, &tagsRaw, &createdStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, model.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan task: %w", err)
@@ -313,8 +239,8 @@ func scanTaskRow(row *sql.Row) (*Task, error) {
 }
 
 // scanTaskRows scans a *sql.Rows into a Task.
-func scanTaskRows(rows *sql.Rows) (*Task, error) {
-	var t Task
+func scanTaskRows(rows *sql.Rows) (*model.Task, error) {
+	var t model.Task
 	var tagsRaw, createdStr, updatedStr string
 	if err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
 		&t.Priority, &tagsRaw, &createdStr, &updatedStr); err != nil {
@@ -323,7 +249,7 @@ func scanTaskRows(rows *sql.Rows) (*Task, error) {
 	return finishTaskScan(&t, tagsRaw, createdStr, updatedStr)
 }
 
-func finishTaskScan(t *Task, tagsRaw, createdStr, updatedStr string) (*Task, error) {
+func finishTaskScan(t *model.Task, tagsRaw, createdStr, updatedStr string) (*model.Task, error) {
 	if err := json.Unmarshal([]byte(tagsRaw), &t.Tags); err != nil {
 		t.Tags = []string{}
 	}

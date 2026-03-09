@@ -11,26 +11,26 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // Store is the interface used by handlers (allows mocking in tests).
 type Store interface {
 	// Memory
-	UpsertMemory(ctx context.Context, entry *store.MemoryEntry) (*store.MemoryEntry, error)
-	GetMemory(ctx context.Context, key string) (*store.MemoryEntry, error)
-	ListMemory(ctx context.Context, f store.MemoryFilter) ([]*store.MemoryEntry, error)
+	UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*model.MemoryEntry, error)
+	GetMemory(ctx context.Context, key string) (*model.MemoryEntry, error)
+	ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error)
 	DeleteMemory(ctx context.Context, key string) error
 	// Tasks
-	CreateTask(ctx context.Context, t *store.Task) (*store.Task, error)
-	GetTask(ctx context.Context, id string) (*store.Task, error)
-	ListTasks(ctx context.Context, f store.TaskFilter) ([]*store.Task, error)
-	UpdateTask(ctx context.Context, id string, upd store.TaskUpdate) (*store.Task, error)
+	CreateTask(ctx context.Context, t *model.Task) (*model.Task, error)
+	GetTask(ctx context.Context, id string) (*model.Task, error)
+	ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Task, error)
+	UpdateTask(ctx context.Context, id string, upd model.TaskUpdate) (*model.Task, error)
 	DeleteTask(ctx context.Context, id string) error
 	// Agents
-	Heartbeat(ctx context.Context, id string, capabilities []string, status store.AgentStatus) (*store.Agent, error)
-	GetAgent(ctx context.Context, id string) (*store.Agent, error)
-	ListAgents(ctx context.Context) ([]*store.Agent, error)
+	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error)
+	GetAgent(ctx context.Context, id string) (*model.Agent, error)
+	ListAgents(ctx context.Context) ([]*model.Agent, error)
 	// Health
 	Ping(ctx context.Context) error
 }

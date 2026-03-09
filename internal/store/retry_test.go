@@ -2,6 +2,8 @@ package store
 
 import (
 	"testing"
+
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // TestIsRetryable_NilError checks that nil errors are not retryable.
@@ -13,7 +15,7 @@ func TestIsRetryable_NilError(t *testing.T) {
 
 // TestIsRetryable_GenericError checks that generic errors are not retryable.
 func TestIsRetryable_GenericError(t *testing.T) {
-	err := ErrNotFound
+	err := model.ErrNotFound
 	if isRetryable(err) {
 		t.Error("ErrNotFound should not be retryable")
 	}

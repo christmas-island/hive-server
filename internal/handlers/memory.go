@@ -7,7 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/model"
 )
 
 // --- Memory input/output types ---
@@ -23,7 +23,7 @@ type memoryUpsertInput struct {
 }
 
 type memoryOutput struct {
-	Body *store.MemoryEntry
+	Body *model.MemoryEntry
 }
 
 type memoryGetInput struct {
@@ -39,7 +39,7 @@ type memoryListInput struct {
 }
 
 type memoryListOutput struct {
-	Body []*store.MemoryEntry
+	Body []*model.MemoryEntry
 }
 
 type memoryDeleteInput struct {
@@ -51,7 +51,7 @@ type memoryDeleteOutput struct{}
 // --- Handlers ---
 
 func (a *API) memoryUpsert(ctx context.Context, input *memoryUpsertInput) (*memoryOutput, error) {
-	entry := &store.MemoryEntry{
+	entry := &model.MemoryEntry{
 		Key:     input.Body.Key,
 		Value:   input.Body.Value,
 		AgentID: input.XAgentID,
@@ -60,7 +60,7 @@ func (a *API) memoryUpsert(ctx context.Context, input *memoryUpsertInput) (*memo
 	}
 
 	result, err := a.store.UpsertMemory(ctx, entry)
-	if errors.Is(err, store.ErrConflict) {
+	if errors.Is(err, model.ErrConflict) {
 		return nil, huma.Error409Conflict("version conflict: stale data")
 	}
 	if err != nil {
@@ -71,7 +71,7 @@ func (a *API) memoryUpsert(ctx context.Context, input *memoryUpsertInput) (*memo
 
 func (a *API) memoryGet(ctx context.Context, input *memoryGetInput) (*memoryOutput, error) {
 	entry, err := a.store.GetMemory(ctx, input.Key)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("memory entry not found")
 	}
 	if err != nil {
@@ -81,7 +81,7 @@ func (a *API) memoryGet(ctx context.Context, input *memoryGetInput) (*memoryOutp
 }
 
 func (a *API) memoryList(ctx context.Context, input *memoryListInput) (*memoryListOutput, error) {
-	f := store.MemoryFilter{
+	f := model.MemoryFilter{
 		Tag:    input.Tag,
 		Agent:  input.Agent,
 		Prefix: input.Prefix,
@@ -93,14 +93,14 @@ func (a *API) memoryList(ctx context.Context, input *memoryListInput) (*memoryLi
 		return nil, huma.Error500InternalServerError("failed to list memory")
 	}
 	if entries == nil {
-		entries = []*store.MemoryEntry{}
+		entries = []*model.MemoryEntry{}
 	}
 	return &memoryListOutput{Body: entries}, nil
 }
 
 func (a *API) memoryDelete(ctx context.Context, input *memoryDeleteInput) (*memoryDeleteOutput, error) {
 	err := a.store.DeleteMemory(ctx, input.Key)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("memory entry not found")
 	}
 	if err != nil {
