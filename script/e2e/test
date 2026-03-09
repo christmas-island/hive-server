@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# script/e2e/test — run the E2E smoke test suite against a live hive-server.
+#
+# Required environment variables:
+#   E2E_TARGET_URL  hive-server base URL, e.g. http://localhost:8080
+#   E2E_TOKEN       Bearer token (leave unset when HIVE_TOKEN is unset on server)
+#
+# Example (local, no auth):
+#   E2E_TARGET_URL=http://localhost:8080 script/e2e/test
+#
+# Example (against a remote with auth):
+#   E2E_TARGET_URL=https://hive.example.com E2E_TOKEN=mysecret script/e2e/test
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+: "${E2E_TARGET_URL:?E2E_TARGET_URL is required}"
+: "${E2E_TOKEN:=}"   # optional; auth is disabled when empty
+
+echo "Running E2E tests against ${E2E_TARGET_URL} ..."
+go test -tags e2e -count=1 -v -timeout 120s ./test/e2e/...
