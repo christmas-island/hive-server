@@ -165,56 +165,6 @@ func (s *Store) DeleteMemory(ctx context.Context, key string) error {
 	})
 }
 
-// scanMemoryRow scans a *sql.Row into a MemoryEntry.
-func scanMemoryRow(row *sql.Row) (*model.MemoryEntry, error) {
-	var e model.MemoryEntry
-	var tagsRaw string
-	var createdStr, updatedStr string
-	err := row.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version, &createdStr, &updatedStr)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, model.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("scan memory: %w", err)
-	}
-	return finishMemoryScan(&e, tagsRaw, createdStr, updatedStr)
-}
-
-// scanMemoryRows scans a *sql.Rows into a MemoryEntry.
-func scanMemoryRows(rows *sql.Rows) (*model.MemoryEntry, error) {
-	var e model.MemoryEntry
-	var tagsRaw string
-	var createdStr, updatedStr string
-	if err := rows.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version, &createdStr, &updatedStr); err != nil {
-		return nil, fmt.Errorf("scan memory row: %w", err)
-	}
-	return finishMemoryScan(&e, tagsRaw, createdStr, updatedStr)
-}
-
-func finishMemoryScan(e *model.MemoryEntry, tagsRaw, createdStr, updatedStr string) (*model.MemoryEntry, error) {
-	if err := json.Unmarshal([]byte(tagsRaw), &e.Tags); err != nil {
-		// Fall back to empty slice on bad JSON.
-		e.Tags = []string{}
-	}
-	if e.Tags == nil {
-		e.Tags = []string{}
-	}
-	t, err := time.Parse(time.RFC3339Nano, createdStr)
-	if err != nil {
-		t, err = time.Parse(time.RFC3339, createdStr)
-	}
-	if err == nil {
-		e.CreatedAt = t
-	}
-	t, err = time.Parse(time.RFC3339Nano, updatedStr)
-	if err != nil {
-		t, err = time.Parse(time.RFC3339, updatedStr)
-	}
-	if err == nil {
-		e.UpdatedAt = t
-	}
-	return e, nil
-}
 
 // tagsContain is a helper for in-memory tag filtering (used in tests).
 func tagsContain(tags []string, tag string) bool {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -73,51 +72,4 @@ func (s *Store) ListAgents(ctx context.Context) ([]*model.Agent, error) {
 		agents = append(agents, a)
 	}
 	return agents, rows.Err()
-}
-
-func scanAgentRow(row *sql.Row) (*model.Agent, error) {
-	var a model.Agent
-	var capsRaw, hbStr, regStr string
-	err := row.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, model.ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("scan agent: %w", err)
-	}
-	return finishAgentScan(&a, capsRaw, hbStr, regStr)
-}
-
-func scanAgentRows(rows *sql.Rows) (*model.Agent, error) {
-	var a model.Agent
-	var capsRaw, hbStr, regStr string
-	if err := rows.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr); err != nil {
-		return nil, fmt.Errorf("scan agent row: %w", err)
-	}
-	return finishAgentScan(&a, capsRaw, hbStr, regStr)
-}
-
-func finishAgentScan(a *model.Agent, capsRaw, hbStr, regStr string) (*model.Agent, error) {
-	if err := json.Unmarshal([]byte(capsRaw), &a.Capabilities); err != nil {
-		a.Capabilities = []string{}
-	}
-	if a.Capabilities == nil {
-		a.Capabilities = []string{}
-	}
-	if ts, err := time.Parse(time.RFC3339Nano, hbStr); err == nil {
-		a.LastHeartbeat = ts
-	} else if ts, err := time.Parse(time.RFC3339, hbStr); err == nil {
-		a.LastHeartbeat = ts
-	}
-	if ts, err := time.Parse(time.RFC3339Nano, regStr); err == nil {
-		a.RegisteredAt = ts
-	} else if ts, err := time.Parse(time.RFC3339, regStr); err == nil {
-		a.RegisteredAt = ts
-	}
-
-	// Apply offline threshold override.
-	if time.Since(a.LastHeartbeat) > offlineThreshold && a.Status != model.AgentStatusOffline {
-		a.Status = model.AgentStatusOffline
-	}
-	return a, nil
 }

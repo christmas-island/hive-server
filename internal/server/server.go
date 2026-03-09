@@ -42,13 +42,17 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}()
 
-	// Build HTTP handler: chi router handles health probes, OpenAPI docs, and
-	// all API endpoints. Health and ready probes are registered without auth.
-	h := handlers.New(s.store, s.config.Token)
+	// Build top-level mux: health probes bypass auth, everything else goes to
+	// the API handler (which owns auth middleware and Huma routing).
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", handleHealth)
+	mux.HandleFunc("GET /ready", handleReady)
+	mux.Handle("GET /healthz", healthzHandler(s.store))
+	mux.Handle("/", handlers.New(s.store, s.config.Token))
 
 	s.srv = &http.Server{
 		Addr:         s.config.BindAddr,
-		Handler:      h,
+		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
