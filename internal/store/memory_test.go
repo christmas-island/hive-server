@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/christmas-island/hive-server/internal/model"
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
@@ -13,7 +14,7 @@ func TestMemoryUpsert_Create(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	entry := &store.MemoryEntry{
+	entry := &model.MemoryEntry{
 		Key:     "test.key",
 		Value:   "hello",
 		AgentID: "agent-1",
@@ -45,7 +46,7 @@ func TestMemoryUpsert_Update(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	entry := &store.MemoryEntry{Key: "upd.key", Value: "v1", AgentID: "a1"}
+	entry := &model.MemoryEntry{Key: "upd.key", Value: "v1", AgentID: "a1"}
 	r1, err := s.UpsertMemory(ctx, entry)
 	if err != nil {
 		t.Fatalf("first upsert: %v", err)
@@ -71,14 +72,14 @@ func TestMemoryUpsert_OptimisticConflict(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	entry := &store.MemoryEntry{Key: "oc.key", Value: "v1", AgentID: "a1"}
+	entry := &model.MemoryEntry{Key: "oc.key", Value: "v1", AgentID: "a1"}
 	_, err := s.UpsertMemory(ctx, entry)
 	if err != nil {
 		t.Fatalf("first upsert: %v", err)
 	}
 
 	// Simulate stale read by using wrong version.
-	stale := &store.MemoryEntry{Key: "oc.key", Value: "stale", AgentID: "a1", Version: 99}
+	stale := &model.MemoryEntry{Key: "oc.key", Value: "stale", AgentID: "a1", Version: 99}
 	_, err = s.UpsertMemory(ctx, stale)
 	if err == nil {
 		t.Fatal("expected ErrConflict, got nil")
@@ -92,7 +93,7 @@ func TestMemoryGet(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.UpsertMemory(ctx, &store.MemoryEntry{Key: "get.key", Value: "data", AgentID: "a1"})
+	_, err := s.UpsertMemory(ctx, &model.MemoryEntry{Key: "get.key", Value: "data", AgentID: "a1"})
 	if err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
@@ -121,14 +122,14 @@ func TestMemoryList(t *testing.T) {
 	ctx := context.Background()
 
 	for _, k := range []string{"a.1", "a.2", "b.1"} {
-		_, err := s.UpsertMemory(ctx, &store.MemoryEntry{Key: k, Value: "v", AgentID: "agent-x", Tags: []string{"t1"}})
+		_, err := s.UpsertMemory(ctx, &model.MemoryEntry{Key: k, Value: "v", AgentID: "agent-x", Tags: []string{"t1"}})
 		if err != nil {
 			t.Fatalf("upsert %q: %v", k, err)
 		}
 	}
 
 	// List all.
-	all, err := s.ListMemory(ctx, store.MemoryFilter{Limit: 10})
+	all, err := s.ListMemory(ctx, model.MemoryFilter{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListMemory all: %v", err)
 	}
@@ -137,7 +138,7 @@ func TestMemoryList(t *testing.T) {
 	}
 
 	// Filter by agent.
-	byAgent, err := s.ListMemory(ctx, store.MemoryFilter{Agent: "agent-x"})
+	byAgent, err := s.ListMemory(ctx, model.MemoryFilter{Agent: "agent-x"})
 	if err != nil {
 		t.Fatalf("ListMemory by agent: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestMemoryList(t *testing.T) {
 	}
 
 	// Filter by prefix.
-	byPrefix, err := s.ListMemory(ctx, store.MemoryFilter{Prefix: "a."})
+	byPrefix, err := s.ListMemory(ctx, model.MemoryFilter{Prefix: "a."})
 	if err != nil {
 		t.Fatalf("ListMemory by prefix: %v", err)
 	}
@@ -155,7 +156,7 @@ func TestMemoryList(t *testing.T) {
 	}
 
 	// Filter by tag.
-	byTag, err := s.ListMemory(ctx, store.MemoryFilter{Tag: "t1"})
+	byTag, err := s.ListMemory(ctx, model.MemoryFilter{Tag: "t1"})
 	if err != nil {
 		t.Fatalf("ListMemory by tag: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestMemoryList_Empty(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	entries, err := s.ListMemory(ctx, store.MemoryFilter{})
+	entries, err := s.ListMemory(ctx, model.MemoryFilter{})
 	if err != nil {
 		t.Fatalf("ListMemory: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestMemoryDelete(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.UpsertMemory(ctx, &store.MemoryEntry{Key: "del.key", Value: "v", AgentID: "a1"})
+	_, err := s.UpsertMemory(ctx, &model.MemoryEntry{Key: "del.key", Value: "v", AgentID: "a1"})
 	if err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestMemoryNilTags(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	entry, err := s.UpsertMemory(ctx, &store.MemoryEntry{Key: "notags", Value: "v", AgentID: "a1", Tags: nil})
+	entry, err := s.UpsertMemory(ctx, &model.MemoryEntry{Key: "notags", Value: "v", AgentID: "a1", Tags: nil})
 	if err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
