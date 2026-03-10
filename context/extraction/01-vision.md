@@ -59,7 +59,7 @@ Hive-server is a **behavioral knowledge engine** that decomposes skill/methodolo
 - Searchable: content, trigger_intent, trigger_tags, source_name
 - Filterable: kind, trigger_phase, trigger_scope, active, tenant_id, chain_id
 - Sortable: effectiveness, weight, created_at
-- Hybrid search (keyword + semantic)
+- BM25 keyword search (no vector/semantic — see Decision 003)
 
 **Gel DB schema:**
 
@@ -78,7 +78,7 @@ Hive-server is a **behavioral knowledge engine** that decomposes skill/methodolo
 ### External Dependencies
 
 - **CockroachDB** — transactional state store
-- **Meilisearch** — hybrid full-text + semantic search
+- **Meilisearch** — BM25 full-text search (keyword only, no embeddings)
 - **Gel DB** (EdgeDB fork) — graph/relationship traversal
 - **LLM (Sonnet-class)** — directive decomposition and contextualization
 - **Tokenizer** — token cost estimation per directive
@@ -87,7 +87,7 @@ Hive-server is a **behavioral knowledge engine** that decomposes skill/methodolo
 
 ### Open Questions / Ambiguities
 
-- Meilisearch "hybrid search" implies vector embeddings — embedding model/provider unspecified
+- ~~Meilisearch "hybrid search" implies vector embeddings~~ Scoped to BM25 only per Decision 003
 - "Sonnet-class" contextualization latency: 2.5–3.5s per inject call; no caching strategy described
 - Feedback outcome attribution mechanism unspecified — how does MCP plugin determine `followed` vs `ignored`?
 - Multi-tenancy: `tenant_id` present everywhere but provisioning/auth model not defined

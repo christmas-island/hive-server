@@ -147,7 +147,7 @@ Wired into `POST /api/v1/ingest` — upgrades from storage-only (202) to full de
 **P4b: Experience-derived directive generation**
 `POST /api/v1/feedback/session-complete` handler — accepts session summary + outcome. LLM analyzes session to extract behavioral patterns worth capturing. Generates experience-derived directives (source_type=experience, no decomposition_run_id). Keyword dedup via Meilisearch to avoid duplicating existing directives. In-process sync to Meili + Gel.
 
-- Depends on: P4a, I4, S4, S5
+- Depends on: P4a, I4, S4, S5, S7
 - Produces: system learns from agent behavior, not just ingested documents
 
 ### Integration
@@ -200,10 +200,11 @@ All 12 original questions resolved. Remaining unknowns are implementation-level:
 3. **Feedback attribution precision** — how precisely can the `afterTurn` LLM judge followed/ignored/negative? May need iterative prompt tuning.
 4. **Codebase pattern ingestion** — source_type=observation triggers (webhook? cron? manual?). Deferred — build the pipeline first, add observation sources later.
 
-## Issue Count: 20
+## Issue Count: 19
 
 - Infrastructure: 4 (I1-I4)
 - Storage: 6 (S2-S7)
 - Pipeline: 5 (P1-P3, P4a, P4b)
 - Integration: 4 (X1-X4)
 - Workflow state: integrated into S3, S6, P1, P4a (not separate issues)
+- Note: S1 was merged into S2 per ZeroClaw review (hence 19, not 20)
