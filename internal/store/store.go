@@ -103,4 +103,35 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
 CREATE INDEX IF NOT EXISTS idx_tasks_creator  ON tasks(creator);
 CREATE INDEX IF NOT EXISTS idx_task_notes_task ON task_notes(task_id);
+
+CREATE TABLE IF NOT EXISTS discovery_agents (
+    id              TEXT PRIMARY KEY,
+    name            TEXT UNIQUE NOT NULL,
+    discord_user_id TEXT,
+    home_channel    TEXT,
+    capabilities    JSONB,
+    status          TEXT,
+    metadata        JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS discovery_channels (
+    id                 TEXT PRIMARY KEY,
+    name               TEXT UNIQUE NOT NULL,
+    discord_channel_id TEXT,
+    purpose            TEXT,
+    metadata           JSONB,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS discovery_roles (
+    id             TEXT PRIMARY KEY,
+    name           TEXT UNIQUE NOT NULL,
+    discord_role_id TEXT,
+    metadata       JSONB,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `

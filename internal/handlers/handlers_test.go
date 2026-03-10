@@ -46,7 +46,7 @@ func newTestServer(t *testing.T, token string) *httptest.Server {
 func cleanTestDB(t *testing.T, s *store.Store) {
 	t.Helper()
 	db := s.DB()
-	for _, tbl := range []string{"task_notes", "tasks", "memory", "agents"} {
+	for _, tbl := range []string{"task_notes", "tasks", "memory", "agents", "discovery_agents", "discovery_channels", "discovery_roles"} {
 		if _, err := db.Exec("DELETE FROM " + tbl); err != nil {
 			t.Logf("cleanup %s: %v", tbl, err)
 		}

@@ -31,6 +31,14 @@ type Store interface {
 	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error)
 	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
+	// Discovery
+	UpsertDiscoveryAgent(ctx context.Context, a *model.DiscoveryAgent) (*model.DiscoveryAgent, error)
+	GetDiscoveryAgent(ctx context.Context, name string) (*model.DiscoveryAgent, error)
+	ListDiscoveryAgents(ctx context.Context) ([]*model.DiscoveryAgent, error)
+	UpsertDiscoveryChannel(ctx context.Context, c *model.DiscoveryChannel) (*model.DiscoveryChannel, error)
+	GetDiscoveryChannel(ctx context.Context, name string) (*model.DiscoveryChannel, error)
+	ListDiscoveryChannels(ctx context.Context) ([]*model.DiscoveryChannel, error)
+	ListDiscoveryRoles(ctx context.Context) ([]*model.DiscoveryRole, error)
 }
 
 // API holds dependencies for all handlers.
@@ -64,6 +72,7 @@ func (a *API) routes() http.Handler {
 		registerMemory(a, api)
 		registerTasks(a, api)
 		registerAgents(a, api)
+		registerDiscovery(a, api)
 	})
 
 	return r

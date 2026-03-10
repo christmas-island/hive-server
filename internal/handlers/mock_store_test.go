@@ -14,12 +14,15 @@ import (
 // mockStore is an in-memory implementation of handlers.Store for unit tests.
 // All methods are safe for concurrent use.
 type mockStore struct {
-	mu       sync.Mutex
-	memory   map[string]*model.MemoryEntry
-	tasks    map[string]*model.Task
-	notes    map[string][]string // task_id -> notes (ordered)
-	agents   map[string]*model.Agent
-	notesMeta map[string][]noteMeta // task_id -> note metadata
+	mu                sync.Mutex
+	memory            map[string]*model.MemoryEntry
+	tasks             map[string]*model.Task
+	notes             map[string][]string // task_id -> notes (ordered)
+	agents            map[string]*model.Agent
+	notesMeta         map[string][]noteMeta // task_id -> note metadata
+	discoveryAgents   map[string]*model.DiscoveryAgent
+	discoveryChannels map[string]*model.DiscoveryChannel
+	discoveryRoles    map[string]*model.DiscoveryRole
 }
 
 type noteMeta struct {
@@ -29,11 +32,14 @@ type noteMeta struct {
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		memory:    make(map[string]*model.MemoryEntry),
-		tasks:     make(map[string]*model.Task),
-		notes:     make(map[string][]string),
-		agents:    make(map[string]*model.Agent),
-		notesMeta: make(map[string][]noteMeta),
+		memory:            make(map[string]*model.MemoryEntry),
+		tasks:             make(map[string]*model.Task),
+		notes:             make(map[string][]string),
+		agents:            make(map[string]*model.Agent),
+		notesMeta:         make(map[string][]noteMeta),
+		discoveryAgents:   make(map[string]*model.DiscoveryAgent),
+		discoveryChannels: make(map[string]*model.DiscoveryChannel),
+		discoveryRoles:    make(map[string]*model.DiscoveryRole),
 	}
 }
 
@@ -299,6 +305,126 @@ func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 	return result, nil
 }
 
+// --- Discovery ---
+
+func (m *mockStore) UpsertDiscoveryAgent(_ context.Context, a *model.DiscoveryAgent) (*model.DiscoveryAgent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+	existing, ok := m.discoveryAgents[a.Name]
+	if !ok {
+		if a.ID == "" {
+			a.ID = a.Name + "-id"
+		}
+		entry := &model.DiscoveryAgent{
+			ID:            a.ID,
+			Name:          a.Name,
+			DiscordUserID: a.DiscordUserID,
+			HomeChannel:   a.HomeChannel,
+			Capabilities:  a.Capabilities,
+			Status:        a.Status,
+			Metadata:      a.Metadata,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		}
+		m.discoveryAgents[a.Name] = entry
+		return copyDiscoveryAgent(entry), nil
+	}
+	existing.DiscordUserID = a.DiscordUserID
+	existing.HomeChannel = a.HomeChannel
+	existing.Capabilities = a.Capabilities
+	existing.Status = a.Status
+	existing.Metadata = a.Metadata
+	existing.UpdatedAt = now
+	return copyDiscoveryAgent(existing), nil
+}
+
+func (m *mockStore) GetDiscoveryAgent(_ context.Context, name string) (*model.DiscoveryAgent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	a, ok := m.discoveryAgents[name]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	return copyDiscoveryAgent(a), nil
+}
+
+func (m *mockStore) ListDiscoveryAgents(_ context.Context) ([]*model.DiscoveryAgent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*model.DiscoveryAgent
+	for _, a := range m.discoveryAgents {
+		result = append(result, copyDiscoveryAgent(a))
+	}
+	return result, nil
+}
+
+func (m *mockStore) UpsertDiscoveryChannel(_ context.Context, c *model.DiscoveryChannel) (*model.DiscoveryChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+	existing, ok := m.discoveryChannels[c.Name]
+	if !ok {
+		if c.ID == "" {
+			c.ID = c.Name + "-id"
+		}
+		entry := &model.DiscoveryChannel{
+			ID:               c.ID,
+			Name:             c.Name,
+			DiscordChannelID: c.DiscordChannelID,
+			Purpose:          c.Purpose,
+			Metadata:         c.Metadata,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+		m.discoveryChannels[c.Name] = entry
+		return copyDiscoveryChannel(entry), nil
+	}
+	existing.DiscordChannelID = c.DiscordChannelID
+	existing.Purpose = c.Purpose
+	existing.Metadata = c.Metadata
+	existing.UpdatedAt = now
+	return copyDiscoveryChannel(existing), nil
+}
+
+func (m *mockStore) GetDiscoveryChannel(_ context.Context, name string) (*model.DiscoveryChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.discoveryChannels[name]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	return copyDiscoveryChannel(c), nil
+}
+
+func (m *mockStore) ListDiscoveryChannels(_ context.Context) ([]*model.DiscoveryChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*model.DiscoveryChannel
+	for _, c := range m.discoveryChannels {
+		result = append(result, copyDiscoveryChannel(c))
+	}
+	return result, nil
+}
+
+func (m *mockStore) ListDiscoveryRoles(_ context.Context) ([]*model.DiscoveryRole, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*model.DiscoveryRole
+	for _, r := range m.discoveryRoles {
+		cp := *r
+		result = append(result, &cp)
+	}
+	return result, nil
+}
+
 // --- Helpers ---
 
 func copyMemoryEntry(e *model.MemoryEntry) *model.MemoryEntry {
@@ -355,4 +481,23 @@ func sliceContains(ss []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func copyDiscoveryAgent(a *model.DiscoveryAgent) *model.DiscoveryAgent {
+	cp := *a
+	if a.Capabilities != nil {
+		cp.Capabilities = append([]byte(nil), a.Capabilities...)
+	}
+	if a.Metadata != nil {
+		cp.Metadata = append([]byte(nil), a.Metadata...)
+	}
+	return &cp
+}
+
+func copyDiscoveryChannel(c *model.DiscoveryChannel) *model.DiscoveryChannel {
+	cp := *c
+	if c.Metadata != nil {
+		cp.Metadata = append([]byte(nil), c.Metadata...)
+	}
+	return &cp
 }
