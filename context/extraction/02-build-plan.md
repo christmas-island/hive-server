@@ -26,7 +26,7 @@
 - **Phase 3: Injection Pipeline** — core value delivery: `POST /api/v1/inject`
 
   - 3.1: `internal/inject/` — `Pipeline`; parallel fan-out to Meili + CRDB; ranking formula `(relevance*0.4)+(effectiveness*0.3)+(weight*0.2)+(recency*0.1)`; `migrations/004_sessions_and_injections.sql` (agent_sessions, injections, injection_outcomes); handler
-  - 3.2: `internal/inject/recompose.go` — `Recomposer` interface; `LLMRecomposer` (Sonnet-class, 10–15s timeout, temp 0.4); `FallbackRecomposer` (raw content pass-through); integrate into Pipeline
+  - 3.2: `internal/inject/recompose.go` — `Recomposer` interface; `LLMRecomposer` (Sonnet-class, 10–15s timeout, temp 0.0); `FallbackRecomposer` (raw content pass-through); integrate into Pipeline
   - Deps: 3.1 needs 1.1 + 2.1; 3.2 needs 0.4 + 3.1
 
 - **Phase 4: Feedback Loop** — outcome tracking, effectiveness scoring
