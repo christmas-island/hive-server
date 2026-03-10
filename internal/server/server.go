@@ -26,6 +26,29 @@ func New(cfg Config) *Server {
 	}
 }
 
+// claimExpiryInterval is how often the background goroutine sweeps for expired claims.
+const claimExpiryInterval = time.Minute
+
+// runClaimExpiry sweeps for and expires stale active claims on a fixed interval.
+// It runs until ctx is cancelled.
+func runClaimExpiry(ctx context.Context, st *store.Store) {
+	ticker := time.NewTicker(claimExpiryInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := st.ExpireOldClaims(ctx)
+			if err != nil {
+				log.Error("expire claims: ", err)
+			} else if n > 0 {
+				log.Info(fmt.Sprintf("expired %d stale claim(s)", n))
+			}
+		}
+	}
+}
+
 // Run starts the HTTP server and blocks until the context is cancelled.
 // It handles store initialization, server lifecycle, and graceful shutdown.
 func (s *Server) Run(ctx context.Context) error {
@@ -41,6 +64,9 @@ func (s *Server) Run(ctx context.Context) error {
 			log.Error("store close: ", err)
 		}
 	}()
+
+	// Start background claim expiry sweep.
+	go runClaimExpiry(ctx, s.store)
 
 	// Build top-level mux: health probes bypass auth, everything else goes to
 	// the API handler (which owns auth middleware and Huma routing).
