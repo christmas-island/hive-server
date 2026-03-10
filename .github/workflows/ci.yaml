@@ -79,10 +79,51 @@ jobs:
   integration:
     name: Integration
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: ".go-version"
       - name: Run integration tests (ephemeral CockroachDB)
-        run: go test -v -race -count=1 -tags integration -timeout 300s ./...
+        run: go test -v -race -count=1 -tags integration -timeout 300s -coverprofile=coverage-integration.out -covermode=atomic ./...
+      - name: Generate integration coverage report
+        run: go tool cover -func=coverage-integration.out | tee coverage-integration.txt
+      - name: Post integration coverage comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverage = fs.readFileSync('coverage-integration.txt', 'utf8');
+            const totalLine = coverage.split('\n').find(l => l.startsWith('total:'));
+            const total = totalLine ? totalLine.split(/\s+/).pop() : 'unknown';
+            const body = [
+              '## 🧪 Integration Coverage (store layer)',
+              '```',
+              coverage.trim(),
+              '```',
+              `**Total: ${total}**`,
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith('## 🧪 Integration Coverage'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
