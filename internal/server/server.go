@@ -9,6 +9,7 @@ import (
 
 	"github.com/christmas-island/hive-server/internal/handlers"
 	"github.com/christmas-island/hive-server/internal/log"
+	"github.com/christmas-island/hive-server/internal/relay"
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
@@ -68,13 +69,16 @@ func (s *Server) Run(ctx context.Context) error {
 	// Start background claim expiry sweep.
 	go runClaimExpiry(ctx, s.store)
 
+	// Create relay client (no-op if URL is empty).
+	rc := relay.New(s.config.OnlyClawsURL, s.config.OnlyClawsToken)
+
 	// Build top-level mux: health probes bypass auth, everything else goes to
 	// the API handler (which owns auth middleware and Huma routing).
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /ready", handleReady)
 	mux.Handle("GET /healthz", healthzHandler(s.store))
-	mux.Handle("/", handlers.New(s.store, s.config.Token))
+	mux.Handle("/", handlers.New(s.store, s.config.Token, rc))
 
 	s.srv = &http.Server{
 		Addr:         s.config.BindAddr,

@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/relay"
 )
 
 // --- Agent input/output types ---
@@ -32,6 +33,27 @@ type agentGetInput struct {
 	ID string `path:"id" doc:"Agent ID"`
 }
 
+type agentUsageInput struct {
+	ID   string `path:"id" doc:"Agent ID"`
+	Body struct {
+		Model            string  `json:"model" doc:"Model name"`
+		InputTokens      int     `json:"inputTokens" doc:"Input token count"`
+		OutputTokens     int     `json:"outputTokens" doc:"Output token count"`
+		CacheReadTokens  int     `json:"cacheReadTokens" doc:"Cache read token count"`
+		CacheWriteTokens int     `json:"cacheWriteTokens" doc:"Cache write token count"`
+		TotalTokens      int     `json:"totalTokens" doc:"Total token count"`
+		EstimatedCostUsd float64 `json:"estimatedCostUsd" doc:"Estimated cost in USD"`
+		SessionID        string  `json:"sessionId" doc:"Session identifier"`
+		Timestamp        string  `json:"timestamp" doc:"RFC3339 timestamp"`
+	}
+}
+
+type agentUsageOutput struct {
+	Body struct {
+		OK bool `json:"ok"`
+	}
+}
+
 // --- Handlers ---
 
 func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*agentOutput, error) {
@@ -47,6 +69,14 @@ func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to record heartbeat")
 	}
+
+	// Fire-and-forget relay to only-claws.
+	if a.relay != nil {
+		go func() {
+			_ = a.relay.UpdateStatus(context.Background(), input.ID, string(status), "")
+		}()
+	}
+
 	return &agentOutput{Body: agent}, nil
 }
 
@@ -70,6 +100,28 @@ func (a *API) agentGet(ctx context.Context, input *agentGetInput) (*agentOutput,
 		return nil, huma.Error500InternalServerError("failed to get agent")
 	}
 	return &agentOutput{Body: agent}, nil
+}
+
+func (a *API) agentUsage(ctx context.Context, input *agentUsageInput) (*agentUsageOutput, error) {
+	if a.relay != nil {
+		usage := relay.UsageReport{
+			Model:            input.Body.Model,
+			InputTokens:      input.Body.InputTokens,
+			OutputTokens:     input.Body.OutputTokens,
+			CacheReadTokens:  input.Body.CacheReadTokens,
+			CacheWriteTokens: input.Body.CacheWriteTokens,
+			TotalTokens:      input.Body.TotalTokens,
+			EstimatedCostUsd: input.Body.EstimatedCostUsd,
+			SessionID:        input.Body.SessionID,
+			Timestamp:        input.Body.Timestamp,
+		}
+		go func() {
+			_ = a.relay.RecordUsage(context.Background(), input.ID, usage)
+		}()
+	}
+	out := &agentUsageOutput{}
+	out.Body.OK = true
+	return out, nil
 }
 
 // --- Registration ---
@@ -101,4 +153,13 @@ func registerAgents(a *API, api huma.API) {
 		Tags:        []string{"Agents"},
 		OperationID: "get-agent",
 	}, a.agentGet)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodPost,
+		Path:        "/api/v1/agents/{id}/usage",
+		Summary:     "Report token usage",
+		Description: "Record agent token usage and relay to only-claws.",
+		Tags:        []string{"Agents"},
+		OperationID: "agent-usage",
+	}, a.agentUsage)
 }

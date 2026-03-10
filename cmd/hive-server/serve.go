@@ -51,11 +51,17 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	// Read auth token from environment.
 	token := os.Getenv("HIVE_TOKEN")
 
+	// Read only-claws relay configuration from environment.
+	onlyClawsURL := os.Getenv("ONLY_CLAWS_URL")
+	onlyClawsToken := os.Getenv("ONLY_CLAWS_TOKEN")
+
 	// Create server configuration.
 	cfg := server.Config{
-		BindAddr:    bind,
-		DatabaseURL: dbURL,
-		Token:       token,
+		BindAddr:       bind,
+		DatabaseURL:    dbURL,
+		Token:          token,
+		OnlyClawsURL:   onlyClawsURL,
+		OnlyClawsToken: onlyClawsToken,
 	}
 
 	// Create and run server.
