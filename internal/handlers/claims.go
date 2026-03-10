@@ -58,6 +58,10 @@ type claimRenewInput struct {
 // --- Handlers ---
 
 func (a *API) claimCreate(ctx context.Context, input *claimCreateInput) (*claimOutput, error) {
+	if input.XAgentID == "" {
+		return nil, huma.Error422UnprocessableEntity("X-Agent-ID header is required to create a claim")
+	}
+
 	dur := time.Hour
 	if input.Body.ExpiresIn != "" {
 		parsed, err := time.ParseDuration(input.Body.ExpiresIn)
