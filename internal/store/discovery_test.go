@@ -57,6 +57,11 @@ func TestUpsertAndGetChannel(t *testing.T) {
 func TestListChannels(t *testing.T) {
 	s := newTestStore(t)
 
+	// Pre-clean discovery_channels so prior test data doesn't leak.
+	if _, err := s.DB().ExecContext(t.Context(), "DELETE FROM discovery_channels"); err != nil {
+		t.Fatalf("pre-clean discovery_channels: %v", err)
+	}
+
 	for _, id := range []string{"ch1", "ch2", "ch3"} {
 		_, err := s.UpsertChannel(t.Context(), &model.DiscoveryChannel{
 			ID:   id,
@@ -176,6 +181,11 @@ func TestUpsertAgentMeta(t *testing.T) {
 
 func TestListDiscoveryAgents(t *testing.T) {
 	s := newTestStore(t)
+
+	// Pre-clean agents so prior test heartbeats don't leak.
+	if _, err := s.DB().ExecContext(t.Context(), "DELETE FROM agents"); err != nil {
+		t.Fatalf("pre-clean agents: %v", err)
+	}
 
 	for _, id := range []string{"da1", "da2"} {
 		_, err := s.Heartbeat(t.Context(), id, nil, model.AgentStatusOnline)
