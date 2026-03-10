@@ -44,13 +44,17 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
-# TODO(shakefu): Add multi-platform builds
 dockers:
   - image_templates:
       - "ghcr.io/christmas-island/hive-server:{{ .Version }}"
       - "ghcr.io/christmas-island/hive-server:latest"
     use: buildx
-    dockerfile: Dockerfile
+    # Dockerfile.release uses the pre-built binary from goreleaser instead
+    # of rebuilding from source (which would fail — goreleaser's Docker build
+    # context only contains compiled artifacts, not go.sum/source files).
+    dockerfile: Dockerfile.release
+    ids:
+      - hive-server
     build_flag_templates:
       - "--platform=linux/amd64"
 
