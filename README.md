@@ -1,5 +1,7 @@
 # hive-server
 
+[![codecov](https://codecov.io/gh/christmas-island/hive-server/branch/main/graph/badge.svg)](https://codecov.io/gh/christmas-island/hive-server)
+
 REST API for cross-agent memory and task coordination. CockroachDB-backed, single binary.
 
 ## Run
