@@ -11,7 +11,7 @@ const testToken = "test-token"
 const testAgent = "test-agent"
 
 func TestMemoryUpsert_Create(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
 		"key":   "foo.bar",
@@ -41,7 +41,7 @@ func TestMemoryUpsert_Create(t *testing.T) {
 }
 
 func TestMemoryUpsert_Update(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// Create.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
@@ -65,7 +65,7 @@ func TestMemoryUpsert_Update(t *testing.T) {
 }
 
 func TestMemoryUpsert_Conflict(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
 		"key": "oc.key", "value": "v1",
@@ -82,7 +82,7 @@ func TestMemoryUpsert_Conflict(t *testing.T) {
 }
 
 func TestMemoryUpsert_MissingKey(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{"value": "v"}, testToken, testAgent)
 	defer resp.Body.Close()
 	// Huma validates input before the handler runs; missing/empty required
@@ -93,7 +93,7 @@ func TestMemoryUpsert_MissingKey(t *testing.T) {
 }
 
 func TestMemoryUpsert_MissingValue(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{"key": "k"}, testToken, testAgent)
 	defer resp.Body.Close()
 	// Huma validates input before the handler runs; missing/empty required
@@ -104,7 +104,7 @@ func TestMemoryUpsert_MissingValue(t *testing.T) {
 }
 
 func TestMemoryGet(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
 		"key": "get.key", "value": "data",
@@ -122,7 +122,7 @@ func TestMemoryGet(t *testing.T) {
 }
 
 func TestMemoryGet_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/memory/no.such.key", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -131,7 +131,7 @@ func TestMemoryGet_NotFound(t *testing.T) {
 }
 
 func TestMemoryList(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	for _, k := range []string{"list.1", "list.2"} {
 		request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
@@ -152,7 +152,7 @@ func TestMemoryList(t *testing.T) {
 }
 
 func TestMemoryList_ByTag(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
 		"key": "tagged", "value": "v", "tags": []string{"findme"},
@@ -173,7 +173,7 @@ func TestMemoryList_ByTag(t *testing.T) {
 }
 
 func TestMemoryList_InvalidLimit(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/memory?limit=bad", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	// Huma validates query parameter types before the handler runs;
@@ -184,7 +184,7 @@ func TestMemoryList_InvalidLimit(t *testing.T) {
 }
 
 func TestMemoryDelete(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	request(t, srv, http.MethodPost, "/api/v1/memory", map[string]any{
 		"key": "del.key", "value": "v",
@@ -205,7 +205,7 @@ func TestMemoryDelete(t *testing.T) {
 }
 
 func TestMemoryDelete_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodDelete, "/api/v1/memory/ghost.key", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {

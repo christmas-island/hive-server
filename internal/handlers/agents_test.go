@@ -8,7 +8,7 @@ import (
 )
 
 func TestAgentHeartbeat(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/agents/jake-claw/heartbeat", map[string]any{
 		"capabilities": []string{"memory", "tasks"},
@@ -33,7 +33,7 @@ func TestAgentHeartbeat(t *testing.T) {
 }
 
 func TestAgentHeartbeat_Idle(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/agents/idle-agent/heartbeat", map[string]any{
 		"status": "idle",
@@ -49,7 +49,7 @@ func TestAgentHeartbeat_Idle(t *testing.T) {
 }
 
 func TestAgentHeartbeat_InvalidStatus_DefaultsOnline(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/agents/weird/heartbeat", map[string]any{
 		"status": "banana",
@@ -65,7 +65,7 @@ func TestAgentHeartbeat_InvalidStatus_DefaultsOnline(t *testing.T) {
 }
 
 func TestAgentHeartbeat_Update(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// First heartbeat.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/agents/updagent/heartbeat", map[string]any{
@@ -94,7 +94,7 @@ func TestAgentHeartbeat_Update(t *testing.T) {
 }
 
 func TestAgentGet(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	request(t, srv, http.MethodPost, "/api/v1/agents/myagent/heartbeat", map[string]any{
 		"status": "online",
@@ -112,7 +112,7 @@ func TestAgentGet(t *testing.T) {
 }
 
 func TestAgentGet_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/agents/no-such", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -121,7 +121,7 @@ func TestAgentGet_NotFound(t *testing.T) {
 }
 
 func TestAgentList(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	for _, id := range []string{"a1", "a2", "a3"} {
 		request(t, srv, http.MethodPost, "/api/v1/agents/"+id+"/heartbeat", map[string]any{
@@ -141,7 +141,7 @@ func TestAgentList(t *testing.T) {
 }
 
 func TestAgentList_Empty(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/agents", nil, testToken, testAgent)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)

@@ -9,7 +9,7 @@ import (
 
 // TestTaskCreate tests POST /api/v1/tasks
 func TestTaskCreate(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{
 		"title":       "build feature X",
@@ -45,7 +45,7 @@ func TestTaskCreate(t *testing.T) {
 }
 
 func TestTaskCreate_MissingTitle(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{
 		"description": "no title",
 	}, testToken, testAgent)
@@ -58,7 +58,7 @@ func TestTaskCreate_MissingTitle(t *testing.T) {
 }
 
 func TestTaskGet(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// Create.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "get me"}, testToken, testAgent)
@@ -77,7 +77,7 @@ func TestTaskGet(t *testing.T) {
 }
 
 func TestTaskGet_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/tasks/no-such-id", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -86,7 +86,7 @@ func TestTaskGet_NotFound(t *testing.T) {
 }
 
 func TestTaskList(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	for _, title := range []string{"t1", "t2", "t3"} {
 		request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": title}, testToken, testAgent).Body.Close()
@@ -104,7 +104,7 @@ func TestTaskList(t *testing.T) {
 }
 
 func TestTaskList_FilterStatus(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// Create two tasks.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "t1"}, testToken, testAgent)
@@ -129,7 +129,7 @@ func TestTaskList_FilterStatus(t *testing.T) {
 }
 
 func TestTaskUpdate_StatusTransition(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "transit"}, testToken, testAgent)
 	var task model.Task
@@ -168,7 +168,7 @@ func TestTaskUpdate_StatusTransition(t *testing.T) {
 }
 
 func TestTaskUpdate_InvalidTransition(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "bad-transit"}, testToken, testAgent)
 	var task model.Task
@@ -185,7 +185,7 @@ func TestTaskUpdate_InvalidTransition(t *testing.T) {
 }
 
 func TestTaskUpdate_AddNote(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "noted"}, testToken, testAgent)
 	var task model.Task
@@ -206,7 +206,7 @@ func TestTaskUpdate_AddNote(t *testing.T) {
 }
 
 func TestTaskUpdate_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodPatch, "/api/v1/tasks/no-such", map[string]any{"note": "hi"}, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -215,7 +215,7 @@ func TestTaskUpdate_NotFound(t *testing.T) {
 }
 
 func TestTaskDelete(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{"title": "del me"}, testToken, testAgent)
 	var task model.Task
@@ -235,7 +235,7 @@ func TestTaskDelete(t *testing.T) {
 }
 
 func TestTaskDelete_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodDelete, "/api/v1/tasks/ghost", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
