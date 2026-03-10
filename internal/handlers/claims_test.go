@@ -43,6 +43,19 @@ func TestCreateClaim(t *testing.T) {
 	}
 }
 
+func TestCreateClaim_MissingAgentID(t *testing.T) {
+	srv := newTestServer(t, testToken)
+
+	resp := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "issue",
+		"resource": "ops#79",
+	}, testToken, "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422", resp.StatusCode)
+	}
+}
+
 func TestCreateClaim_Conflict(t *testing.T) {
 	srv := newTestServer(t, testToken)
 
