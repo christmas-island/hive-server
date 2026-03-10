@@ -1,7 +1,7 @@
 # Decision 007: Skill State Backend — Separate Workstream
 
 **Date:** 2026-03-10
-**Status:** Proposed (pending Jake confirmation)
+**Status:** Superseded by 007-workflows-are-directive-chains.md
 **Decided by:** JakeClaw (proposed)
 
 ## Context
