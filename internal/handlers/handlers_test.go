@@ -36,7 +36,7 @@ func newTestServer(t *testing.T, token string) *httptest.Server {
 		cleanTestDB(t, s)
 		_ = s.Close()
 	})
-	h := handlers.New(s, token)
+	h := handlers.New(s, token, nil)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv

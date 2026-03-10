@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/relay"
 )
 
 // Store is the interface used by handlers (allows mocking in tests).
@@ -57,11 +58,12 @@ type Store interface {
 type API struct {
 	store Store
 	token string // HIVE_TOKEN for Bearer auth
+	relay *relay.Client
 }
 
 // New creates a new API and returns a mounted chi router.
-func New(s Store, token string) http.Handler {
-	a := &API{store: s, token: token}
+func New(s Store, token string, rc *relay.Client) http.Handler {
+	a := &API{store: s, token: token, relay: rc}
 	return a.routes()
 }
 
