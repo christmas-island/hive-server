@@ -31,6 +31,18 @@ type Store interface {
 	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error)
 	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
+	// Discovery
+	UpsertChannel(ctx context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error)
+	GetChannel(ctx context.Context, id string) (*model.DiscoveryChannel, error)
+	ListChannels(ctx context.Context) ([]*model.DiscoveryChannel, error)
+	DeleteChannel(ctx context.Context, id string) error
+	UpsertRole(ctx context.Context, role *model.DiscoveryRole) (*model.DiscoveryRole, error)
+	GetRole(ctx context.Context, id string) (*model.DiscoveryRole, error)
+	ListRoles(ctx context.Context) ([]*model.DiscoveryRole, error)
+	DeleteRole(ctx context.Context, id string) error
+	UpsertAgentMeta(ctx context.Context, id string, meta *model.DiscoveryAgentMeta) (*model.DiscoveryAgent, error)
+	GetDiscoveryAgent(ctx context.Context, id string) (*model.DiscoveryAgent, error)
+	ListDiscoveryAgents(ctx context.Context) ([]*model.DiscoveryAgent, error)
 }
 
 // API holds dependencies for all handlers.
@@ -64,6 +76,7 @@ func (a *API) routes() http.Handler {
 		registerMemory(a, api)
 		registerTasks(a, api)
 		registerAgents(a, api)
+		registerDiscovery(a, api)
 	})
 
 	return r

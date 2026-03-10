@@ -14,12 +14,15 @@ import (
 // mockStore is an in-memory implementation of handlers.Store for unit tests.
 // All methods are safe for concurrent use.
 type mockStore struct {
-	mu       sync.Mutex
-	memory   map[string]*model.MemoryEntry
-	tasks    map[string]*model.Task
-	notes    map[string][]string // task_id -> notes (ordered)
-	agents   map[string]*model.Agent
-	notesMeta map[string][]noteMeta // task_id -> note metadata
+	mu              sync.Mutex
+	memory          map[string]*model.MemoryEntry
+	tasks           map[string]*model.Task
+	notes           map[string][]string // task_id -> notes (ordered)
+	agents          map[string]*model.Agent
+	notesMeta       map[string][]noteMeta // task_id -> note metadata
+	discoveryAgents map[string]*model.DiscoveryAgent
+	channels        map[string]*model.DiscoveryChannel
+	roles           map[string]*model.DiscoveryRole
 }
 
 type noteMeta struct {
@@ -29,11 +32,14 @@ type noteMeta struct {
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		memory:    make(map[string]*model.MemoryEntry),
-		tasks:     make(map[string]*model.Task),
-		notes:     make(map[string][]string),
-		agents:    make(map[string]*model.Agent),
-		notesMeta: make(map[string][]noteMeta),
+		memory:          make(map[string]*model.MemoryEntry),
+		tasks:           make(map[string]*model.Task),
+		notes:           make(map[string][]string),
+		agents:          make(map[string]*model.Agent),
+		notesMeta:       make(map[string][]noteMeta),
+		discoveryAgents: make(map[string]*model.DiscoveryAgent),
+		channels:        make(map[string]*model.DiscoveryChannel),
+		roles:           make(map[string]*model.DiscoveryRole),
 	}
 }
 
@@ -295,6 +301,173 @@ func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 	var result []*model.Agent
 	for _, a := range m.agents {
 		result = append(result, copyAgent(a))
+	}
+	return result, nil
+}
+
+// --- Discovery ---
+
+func (m *mockStore) UpsertChannel(_ context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now().UTC()
+	c := *ch
+	if c.Members == nil {
+		c.Members = []string{}
+	}
+	if existing, ok := m.channels[ch.ID]; ok {
+		c.CreatedAt = existing.CreatedAt
+	} else {
+		c.CreatedAt = now
+	}
+	c.UpdatedAt = now
+	m.channels[ch.ID] = &c
+	result := c
+	return &result, nil
+}
+
+func (m *mockStore) GetChannel(_ context.Context, id string) (*model.DiscoveryChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ch, ok := m.channels[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	result := *ch
+	return &result, nil
+}
+
+func (m *mockStore) ListChannels(_ context.Context) ([]*model.DiscoveryChannel, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []*model.DiscoveryChannel
+	for _, ch := range m.channels {
+		c := *ch
+		result = append(result, &c)
+	}
+	return result, nil
+}
+
+func (m *mockStore) DeleteChannel(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.channels[id]; !ok {
+		return model.ErrNotFound
+	}
+	delete(m.channels, id)
+	return nil
+}
+
+func (m *mockStore) UpsertRole(_ context.Context, role *model.DiscoveryRole) (*model.DiscoveryRole, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now().UTC()
+	r := *role
+	if r.Members == nil {
+		r.Members = []string{}
+	}
+	if existing, ok := m.roles[role.ID]; ok {
+		r.CreatedAt = existing.CreatedAt
+	} else {
+		r.CreatedAt = now
+	}
+	r.UpdatedAt = now
+	m.roles[role.ID] = &r
+	result := r
+	return &result, nil
+}
+
+func (m *mockStore) GetRole(_ context.Context, id string) (*model.DiscoveryRole, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.roles[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	result := *r
+	return &result, nil
+}
+
+func (m *mockStore) ListRoles(_ context.Context) ([]*model.DiscoveryRole, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []*model.DiscoveryRole
+	for _, r := range m.roles {
+		role := *r
+		result = append(result, &role)
+	}
+	return result, nil
+}
+
+func (m *mockStore) DeleteRole(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.roles[id]; !ok {
+		return model.ErrNotFound
+	}
+	delete(m.roles, id)
+	return nil
+}
+
+func (m *mockStore) UpsertAgentMeta(_ context.Context, id string, meta *model.DiscoveryAgentMeta) (*model.DiscoveryAgent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	agent, ok := m.agents[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	metaCopy := *meta
+	if metaCopy.Channels == nil {
+		metaCopy.Channels = []string{}
+	}
+	da := &model.DiscoveryAgent{
+		Agent:              copyAgent(agent),
+		DiscoveryAgentMeta: &metaCopy,
+	}
+	m.discoveryAgents[id] = da
+	result := *da
+	metaResult := *da.DiscoveryAgentMeta
+	result.DiscoveryAgentMeta = &metaResult
+	return &result, nil
+}
+
+func (m *mockStore) GetDiscoveryAgent(_ context.Context, id string) (*model.DiscoveryAgent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	agent, ok := m.agents[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	da, ok := m.discoveryAgents[id]
+	if !ok {
+		// Agent exists but no meta set yet — return with empty meta.
+		return &model.DiscoveryAgent{
+			Agent:              copyAgent(agent),
+			DiscoveryAgentMeta: &model.DiscoveryAgentMeta{Channels: []string{}},
+		}, nil
+	}
+	result := *da
+	metaResult := *da.DiscoveryAgentMeta
+	result.DiscoveryAgentMeta = &metaResult
+	return &result, nil
+}
+
+func (m *mockStore) ListDiscoveryAgents(_ context.Context) ([]*model.DiscoveryAgent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []*model.DiscoveryAgent
+	for id, agent := range m.agents {
+		if da, ok := m.discoveryAgents[id]; ok {
+			r := *da
+			meta := *da.DiscoveryAgentMeta
+			r.DiscoveryAgentMeta = &meta
+			result = append(result, &r)
+		} else {
+			result = append(result, &model.DiscoveryAgent{
+				Agent:              copyAgent(agent),
+				DiscoveryAgentMeta: &model.DiscoveryAgentMeta{Channels: []string{}},
+			})
+		}
 	}
 	return result, nil
 }

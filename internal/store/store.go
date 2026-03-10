@@ -98,9 +98,36 @@ CREATE TABLE IF NOT EXISTS agents (
     registered_at  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS discovery_channels (
+    id         TEXT NOT NULL PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    discord_id TEXT NOT NULL DEFAULT '',
+    purpose    TEXT NOT NULL DEFAULT '',
+    category   TEXT NOT NULL DEFAULT '',
+    members    JSONB NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS discovery_roles (
+    id         TEXT NOT NULL PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    discord_id TEXT NOT NULL DEFAULT '',
+    members    JSONB NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS discord_user_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS home_channel     TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS mention_format   TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS channels         JSONB NOT NULL DEFAULT '[]';
+
 CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory(agent_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
 CREATE INDEX IF NOT EXISTS idx_tasks_creator  ON tasks(creator);
 CREATE INDEX IF NOT EXISTS idx_task_notes_task ON task_notes(task_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_channels_discord ON discovery_channels(discord_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_roles_discord    ON discovery_roles(discord_id);
 `
