@@ -23,6 +23,7 @@ type mockStore struct {
 	discoveryAgents map[string]*model.DiscoveryAgent
 	channels        map[string]*model.DiscoveryChannel
 	roles           map[string]*model.DiscoveryRole
+	claims          map[string]*model.Claim
 }
 
 type noteMeta struct {
@@ -40,6 +41,7 @@ func newMockStore() *mockStore {
 		discoveryAgents: make(map[string]*model.DiscoveryAgent),
 		channels:        make(map[string]*model.DiscoveryChannel),
 		roles:           make(map[string]*model.DiscoveryRole),
+		claims:          make(map[string]*model.Claim),
 	}
 }
 
@@ -472,6 +474,125 @@ func (m *mockStore) ListDiscoveryAgents(_ context.Context) ([]*model.DiscoveryAg
 	return result, nil
 }
 
+// --- Claims ---
+
+func (m *mockStore) CreateClaim(_ context.Context, c *model.Claim) (*model.Claim, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check for active claim on same resource.
+	for _, existing := range m.claims {
+		if existing.Resource == c.Resource && existing.Status == model.ClaimStatusActive {
+			return nil, model.ErrConflict
+		}
+	}
+
+	now := time.Now().UTC()
+	claim := &model.Claim{
+		ID:        uuid.New().String(),
+		Type:      c.Type,
+		Resource:  c.Resource,
+		AgentID:   c.AgentID,
+		Status:    model.ClaimStatusActive,
+		Metadata:  c.Metadata,
+		ClaimedAt: now,
+		ExpiresAt: c.ExpiresAt,
+		UpdatedAt: now,
+	}
+	if claim.Metadata == nil {
+		claim.Metadata = map[string]string{}
+	}
+	m.claims[claim.ID] = claim
+	return copyClaim(claim), nil
+}
+
+func (m *mockStore) GetClaim(_ context.Context, id string) (*model.Claim, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.claims[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	return copyClaim(c), nil
+}
+
+func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model.Claim, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*model.Claim
+	for _, c := range m.claims {
+		if f.Type != "" && string(c.Type) != f.Type {
+			continue
+		}
+		if f.AgentID != "" && c.AgentID != f.AgentID {
+			continue
+		}
+		if f.Resource != "" && c.Resource != f.Resource {
+			continue
+		}
+		if f.Status != "" && string(c.Status) != f.Status {
+			continue
+		}
+		result = append(result, copyClaim(c))
+	}
+
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.Claim, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.claims[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	c.Status = model.ClaimStatusReleased
+	c.UpdatedAt = time.Now().UTC()
+	return copyClaim(c), nil
+}
+
+func (m *mockStore) RenewClaim(_ context.Context, id string, expiresAt time.Time) (*model.Claim, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.claims[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	if c.Status != model.ClaimStatusActive {
+		return nil, model.ErrNotFound
+	}
+	c.ExpiresAt = expiresAt
+	c.UpdatedAt = time.Now().UTC()
+	return copyClaim(c), nil
+}
+
+func (m *mockStore) ExpireOldClaims(_ context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+	var count int64
+	for _, c := range m.claims {
+		if c.Status == model.ClaimStatusActive && c.ExpiresAt.Before(now) {
+			c.Status = model.ClaimStatusExpired
+			c.UpdatedAt = now
+			count++
+		}
+	}
+	return count, nil
+}
+
 // --- Helpers ---
 
 func copyMemoryEntry(e *model.MemoryEntry) *model.MemoryEntry {
@@ -518,6 +639,24 @@ func copyAgent(a *model.Agent) *model.Agent {
 		Capabilities:  caps,
 		LastHeartbeat: a.LastHeartbeat,
 		RegisteredAt:  a.RegisteredAt,
+	}
+}
+
+func copyClaim(c *model.Claim) *model.Claim {
+	meta := make(map[string]string, len(c.Metadata))
+	for k, v := range c.Metadata {
+		meta[k] = v
+	}
+	return &model.Claim{
+		ID:        c.ID,
+		Type:      c.Type,
+		Resource:  c.Resource,
+		AgentID:   c.AgentID,
+		Status:    c.Status,
+		Metadata:  meta,
+		ClaimedAt: c.ClaimedAt,
+		ExpiresAt: c.ExpiresAt,
+		UpdatedAt: c.UpdatedAt,
 	}
 }
 

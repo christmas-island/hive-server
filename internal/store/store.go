@@ -130,4 +130,21 @@ CREATE INDEX IF NOT EXISTS idx_tasks_creator  ON tasks(creator);
 CREATE INDEX IF NOT EXISTS idx_task_notes_task ON task_notes(task_id);
 CREATE INDEX IF NOT EXISTS idx_discovery_channels_discord ON discovery_channels(discord_id);
 CREATE INDEX IF NOT EXISTS idx_discovery_roles_discord    ON discovery_roles(discord_id);
+
+CREATE TABLE IF NOT EXISTS claims (
+    id          TEXT    NOT NULL PRIMARY KEY,
+    type        TEXT    NOT NULL,
+    resource    TEXT    NOT NULL,
+    agent_id    TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'active',
+    metadata    JSONB   NOT NULL DEFAULT '{}',
+    claimed_at  TEXT    NOT NULL,
+    expires_at  TEXT    NOT NULL,
+    updated_at  TEXT    NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_claims_active_resource
+    ON claims (resource) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_claims_agent ON claims(agent_id);
+CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
 `
