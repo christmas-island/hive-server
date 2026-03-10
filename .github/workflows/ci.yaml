@@ -69,7 +69,7 @@ jobs:
         with:
           files: coverage.out
           flags: unit
-          fail_ci_if_error: false  # don't block PRs if Codecov is unreachable
+          fail_ci_if_error: false # don't block PRs if Codecov is unreachable
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Post coverage comment
