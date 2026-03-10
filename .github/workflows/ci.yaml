@@ -12,9 +12,10 @@ concurrency:
 
 env:
   # Fail the build if unit coverage drops below this percentage.
-  # Current baseline: ~30.5% total (store layer excluded from unit tests).
-  # Raise this as the test suite improves.
+  # Target: 60% (see issue tracking ratchet-up). Current baseline: ~28%.
   COVERAGE_THRESHOLD: "25"
+  # Fail the build if diff coverage on new/changed code drops below this percentage.
+  DIFF_COVERAGE_THRESHOLD: "80"
 
 jobs:
   lint:
@@ -37,6 +38,8 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: ".go-version"
@@ -55,6 +58,34 @@ jobs:
             exit 1
           fi
           echo "✅ Coverage ${total}% meets threshold ${COVERAGE_THRESHOLD}%"
+      - name: Generate diff for PR
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git diff "origin/${BASE_REF}...HEAD" > pr.diff
+      - name: Run diff coverage check
+        id: diff-coverage
+        if: github.event_name == 'pull_request'
+        uses: PanagiotisPtr/cov-diff@5e769845c123d52b7beb7777d9c9a0b3d7094830 # main
+        with:
+          path: .
+          coverprofile: coverage.out
+          diff: pr.diff
+          module: github.com/christmas-island/hive-server
+      - name: Enforce diff coverage threshold
+        if: github.event_name == 'pull_request'
+        run: |
+          diff_cov="${{ steps.diff-coverage.outputs.covdiff }}"
+          echo "Diff coverage: ${diff_cov}% (threshold: ${DIFF_COVERAGE_THRESHOLD}%)"
+          if [ -z "$diff_cov" ]; then
+            echo "ℹ️ No changed Go code detected — skipping diff coverage gate"
+            exit 0
+          fi
+          if awk "BEGIN {exit !(${diff_cov} < ${DIFF_COVERAGE_THRESHOLD})}"; then
+            echo "❌ Diff coverage ${diff_cov}% is below threshold ${DIFF_COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+          echo "✅ Diff coverage ${diff_cov}% meets threshold ${DIFF_COVERAGE_THRESHOLD}%"
       - name: Upload coverage HTML artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -84,12 +115,25 @@ jobs:
             const totalNum = parseFloat(total);
             const threshold = parseInt(process.env.COVERAGE_THRESHOLD, 10);
             const status = !isNaN(totalNum) && totalNum >= threshold ? '✅' : '❌';
+
+            const diffCov = '${{ steps.diff-coverage.outputs.covdiff }}';
+            const diffThreshold = parseInt(process.env.DIFF_COVERAGE_THRESHOLD, 10);
+            let diffLine = '';
+            if (diffCov && diffCov !== '') {
+              const diffNum = parseFloat(diffCov);
+              const diffStatus = !isNaN(diffNum) && diffNum >= diffThreshold ? '✅' : '❌';
+              diffLine = `**Diff coverage: ${diffCov}%** ${diffStatus} _(threshold: ${diffThreshold}%)_`;
+            } else {
+              diffLine = `**Diff coverage: n/a** ℹ️ _(no changed Go code)_`;
+            }
+
             const body = [
               '## 📊 Code Coverage',
               '```',
               coverage.trim(),
               '```',
               `**Total: ${total}** ${status} _(threshold: ${threshold}%)_`,
+              diffLine,
             ].join('\n');
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
