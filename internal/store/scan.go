@@ -155,3 +155,54 @@ func finishTaskScan(t *model.Task, tagsRaw, createdStr, updatedStr string) (*mod
 	}
 	return t, nil
 }
+
+// --- Claim scan helpers ---
+
+func scanClaimRow(row *sql.Row) (*model.Claim, error) {
+	var c model.Claim
+	var metaRaw, claimedStr, expiresStr, updatedStr string
+	err := row.Scan(&c.ID, &c.Type, &c.Resource, &c.AgentID, &c.Status,
+		&metaRaw, &claimedStr, &expiresStr, &updatedStr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, model.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scan claim: %w", err)
+	}
+	return finishClaimScan(&c, metaRaw, claimedStr, expiresStr, updatedStr)
+}
+
+func scanClaimRows(rows *sql.Rows) (*model.Claim, error) {
+	var c model.Claim
+	var metaRaw, claimedStr, expiresStr, updatedStr string
+	if err := rows.Scan(&c.ID, &c.Type, &c.Resource, &c.AgentID, &c.Status,
+		&metaRaw, &claimedStr, &expiresStr, &updatedStr); err != nil {
+		return nil, fmt.Errorf("scan claim row: %w", err)
+	}
+	return finishClaimScan(&c, metaRaw, claimedStr, expiresStr, updatedStr)
+}
+
+func finishClaimScan(c *model.Claim, metaRaw, claimedStr, expiresStr, updatedStr string) (*model.Claim, error) {
+	if err := json.Unmarshal([]byte(metaRaw), &c.Metadata); err != nil {
+		c.Metadata = map[string]string{}
+	}
+	if c.Metadata == nil {
+		c.Metadata = map[string]string{}
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, claimedStr); err == nil {
+		c.ClaimedAt = ts
+	} else if ts, err := time.Parse(time.RFC3339, claimedStr); err == nil {
+		c.ClaimedAt = ts
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, expiresStr); err == nil {
+		c.ExpiresAt = ts
+	} else if ts, err := time.Parse(time.RFC3339, expiresStr); err == nil {
+		c.ExpiresAt = ts
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, updatedStr); err == nil {
+		c.UpdatedAt = ts
+	} else if ts, err := time.Parse(time.RFC3339, updatedStr); err == nil {
+		c.UpdatedAt = ts
+	}
+	return c, nil
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
@@ -31,6 +32,13 @@ type Store interface {
 	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error)
 	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
+	// Claims
+	CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, error)
+	GetClaim(ctx context.Context, id string) (*model.Claim, error)
+	ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.Claim, error)
+	ReleaseClaim(ctx context.Context, id string) (*model.Claim, error)
+	RenewClaim(ctx context.Context, id string, expiresAt time.Time) (*model.Claim, error)
+	ExpireOldClaims(ctx context.Context) (int64, error)
 	// Discovery
 	UpsertChannel(ctx context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error)
 	GetChannel(ctx context.Context, id string) (*model.DiscoveryChannel, error)
@@ -77,6 +85,7 @@ func (a *API) routes() http.Handler {
 		registerTasks(a, api)
 		registerAgents(a, api)
 		registerDiscovery(a, api)
+		registerClaims(a, api)
 	})
 
 	return r
