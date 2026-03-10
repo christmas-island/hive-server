@@ -3,6 +3,7 @@ module github.com/christmas-island/hive-server
 go 1.25.1
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/cockroachdb/cockroach-go/v2 v2.4.3
 	github.com/danielgtaylor/huma/v2 v2.37.2
 	github.com/go-chi/chi/v5 v5.2.5

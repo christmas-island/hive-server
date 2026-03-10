@@ -3,72 +3,24 @@ package store
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"errors"
-	"fmt"
-	"sync"
 	"testing"
+
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 
 	"github.com/christmas-island/hive-server/internal/model"
 )
 
-// --- minimal mock SQL driver for RetryTx unit tests ---
-
-// mockDriver is a no-op database/sql driver backed by a mockConn factory.
-type mockDriver struct {
-	mu      sync.Mutex
-	connFn  func() *mockTx // factory for per-BeginTx behaviour
-}
-
-func (d *mockDriver) Open(_ string) (driver.Conn, error) {
-	return &mockConn{driver: d}, nil
-}
-
-type mockConn struct {
-	driver *mockDriver
-}
-
-func (c *mockConn) Prepare(_ string) (driver.Stmt, error) { return nil, fmt.Errorf("not implemented") }
-func (c *mockConn) Close() error                          { return nil }
-func (c *mockConn) Begin() (driver.Tx, error) {
-	tx := c.driver.connFn()
-	return tx, tx.beginErr
-}
-
-// BeginTx lets database/sql use context-aware begin.
-func (c *mockConn) BeginTx(_ context.Context, _ driver.TxOptions) (driver.Tx, error) {
-	tx := c.driver.connFn()
-	return tx, tx.beginErr
-}
-
-type mockTx struct {
-	beginErr  error
-	commitErr error
-}
-
-func (t *mockTx) Commit() error   { return t.commitErr }
-func (t *mockTx) Rollback() error { return nil }
-
-// newMockDB registers a uniquely-named mock driver and returns a *sql.DB backed by it.
-// connFn is called on every BeginTx to get the tx behaviour for that attempt.
-var mockDriverIdx int
-var mockDriverMu sync.Mutex
-
-func newMockDB(t *testing.T, connFn func() *mockTx) *sql.DB {
+// newMockDB creates a *sql.DB backed by go-sqlmock and returns it along with
+// the Sqlmock controller. The DB is automatically closed on test cleanup.
+func newMockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	t.Helper()
-	mockDriverMu.Lock()
-	name := fmt.Sprintf("mock_store_%d", mockDriverIdx)
-	mockDriverIdx++
-	mockDriverMu.Unlock()
-
-	d := &mockDriver{connFn: connFn}
-	sql.Register(name, d)
-	db, err := sql.Open(name, "")
+	db, mock, err := sqlmock.New()
 	if err != nil {
-		t.Fatalf("sql.Open mock: %v", err)
+		t.Fatalf("sqlmock.New: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return db
+	return db, mock
 }
 
 // TestIsRetryable_NilError checks that nil errors are not retryable.
@@ -174,8 +126,11 @@ func TestBackoff_Cap(t *testing.T) {
 // TestRetryTx_Success verifies that a fn that succeeds on the first attempt
 // commits the transaction and returns nil.
 func TestRetryTx_Success(t *testing.T) {
-	db := newMockDB(t, func() *mockTx { return &mockTx{} })
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 
 	called := 0
 	err := s.RetryTx(context.Background(), func(_ *sql.Tx) error {
@@ -188,15 +143,28 @@ func TestRetryTx_Success(t *testing.T) {
 	if called != 1 {
 		t.Errorf("fn called %d times, want 1", called)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
 }
 
 // TestRetryTx_RetryThenSucceed verifies that RetryTx retries on serialization
 // errors and eventually succeeds when the fn stops returning retryable errors.
 func TestRetryTx_RetryThenSucceed(t *testing.T) {
-	db := newMockDB(t, func() *mockTx { return &mockTx{} })
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
 	retryable := &mockPGError{code: "40001"}
+
+	// Attempts 1 and 2: fn returns retryable → Begin + Rollback each.
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+	// Attempt 3: fn succeeds → Begin + Commit.
+	mock.ExpectBegin()
+	mock.ExpectCommit()
+
 	attempt := 0
 	err := s.RetryTx(context.Background(), func(_ *sql.Tx) error {
 		attempt++
@@ -211,15 +179,25 @@ func TestRetryTx_RetryThenSucceed(t *testing.T) {
 	if attempt != 3 {
 		t.Errorf("fn called %d times, want 3", attempt)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
 }
 
 // TestRetryTx_ExhaustsRetries verifies that RetryTx returns an error when
 // the fn keeps returning retryable errors beyond maxRetries.
 func TestRetryTx_ExhaustsRetries(t *testing.T) {
-	db := newMockDB(t, func() *mockTx { return &mockTx{} })
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
 	retryable := &mockPGError{code: "40001"}
+
+	// fn is called maxRetries+1 times (attempts 0..maxRetries), each → Begin + Rollback.
+	for range maxRetries + 1 {
+		mock.ExpectBegin()
+		mock.ExpectRollback()
+	}
+
 	attempt := 0
 	err := s.RetryTx(context.Background(), func(_ *sql.Tx) error {
 		attempt++
@@ -228,17 +206,22 @@ func TestRetryTx_ExhaustsRetries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error after exhausting retries, got nil")
 	}
-	// fn is called maxRetries+1 times (attempts 0..maxRetries).
 	if attempt != maxRetries+1 {
 		t.Errorf("fn called %d times, want %d", attempt, maxRetries+1)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
 	}
 }
 
 // TestRetryTx_NonRetryableError verifies that non-retryable errors are returned
 // immediately without retrying.
 func TestRetryTx_NonRetryableError(t *testing.T) {
-	db := newMockDB(t, func() *mockTx { return &mockTx{} })
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	mock.ExpectRollback()
 
 	boom := errors.New("non-retryable")
 	attempt := 0
@@ -252,13 +235,20 @@ func TestRetryTx_NonRetryableError(t *testing.T) {
 	if attempt != 1 {
 		t.Errorf("fn called %d times, want 1 (no retries)", attempt)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
 }
 
 // TestRetryTx_ContextCancelled verifies that RetryTx respects context cancellation
 // during the backoff sleep between retries.
 func TestRetryTx_ContextCancelled(t *testing.T) {
-	db := newMockDB(t, func() *mockTx { return &mockTx{} })
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
+
+	// Only one attempt before context cancellation aborts the backoff.
+	mock.ExpectBegin()
+	mock.ExpectRollback()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	retryable := &mockPGError{code: "40001"}
@@ -274,15 +264,18 @@ func TestRetryTx_ContextCancelled(t *testing.T) {
 	if attempt != 1 {
 		t.Errorf("fn called %d times, want 1", attempt)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
 }
 
 // TestRetryTx_BeginError verifies that an error from BeginTx is returned immediately.
 func TestRetryTx_BeginError(t *testing.T) {
-	beginErr := errors.New("connection refused")
-	db := newMockDB(t, func() *mockTx {
-		return &mockTx{beginErr: beginErr}
-	})
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
+
+	beginErr := errors.New("connection refused")
+	mock.ExpectBegin().WillReturnError(beginErr)
 
 	err := s.RetryTx(context.Background(), func(_ *sql.Tx) error {
 		t.Fatal("fn should not be called when begin fails")
@@ -294,21 +287,25 @@ func TestRetryTx_BeginError(t *testing.T) {
 	if !errors.Is(err, beginErr) {
 		t.Errorf("expected beginErr wrapped, got %v", err)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
 }
 
 // TestRetryTx_CommitRetryThenSucceed verifies that a retryable commit error
 // also triggers a retry.
 func TestRetryTx_CommitRetryThenSucceed(t *testing.T) {
-	retryable := &mockPGError{code: "40001"}
-	commitAttempt := 0
-	db := newMockDB(t, func() *mockTx {
-		commitAttempt++
-		if commitAttempt == 1 {
-			return &mockTx{commitErr: retryable}
-		}
-		return &mockTx{}
-	})
+	db, mock := newMockDB(t)
 	s := &Store{db: db}
+
+	retryable := &mockPGError{code: "40001"}
+
+	// Attempt 1: fn succeeds but commit fails with retryable error.
+	mock.ExpectBegin()
+	mock.ExpectCommit().WillReturnError(retryable)
+	// Attempt 2: fn succeeds and commit succeeds.
+	mock.ExpectBegin()
+	mock.ExpectCommit()
 
 	fnCalled := 0
 	err := s.RetryTx(context.Background(), func(_ *sql.Tx) error {
@@ -320,5 +317,8 @@ func TestRetryTx_CommitRetryThenSucceed(t *testing.T) {
 	}
 	if fnCalled != 2 {
 		t.Errorf("fn called %d times, want 2 (one commit retry)", fnCalled)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
 	}
 }
