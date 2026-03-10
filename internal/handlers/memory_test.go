@@ -212,3 +212,45 @@ func TestMemoryDelete_NotFound(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+func TestUpsertMemory_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("UpsertMemory", errTest)
+	resp := request(t, srv, http.MethodPut, "/api/v1/agents/agt/memory/key", map[string]any{
+		"value": "v",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetMemory_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetMemory", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/agents/agt/memory/key", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestListMemory_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListMemory", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/agents/agt/memory", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteMemory_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("DeleteMemory", errTest)
+	resp := request(t, srv, http.MethodDelete, "/api/v1/agents/agt/memory/key", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}

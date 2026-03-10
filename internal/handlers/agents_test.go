@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/christmas-island/hive-server/internal/model"
@@ -150,5 +151,81 @@ func TestAgentList_Empty(t *testing.T) {
 	decodeJSON(t, resp, &agents)
 	if agents == nil {
 		t.Error("expected non-nil agents slice")
+	}
+}
+
+func TestAgentUsage(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+	resp := request(t, srv, http.MethodPost, "/api/v1/agents/usage-agent/usage", map[string]any{
+		"model":            "claude-3-5-sonnet",
+		"inputTokens":      1000,
+		"outputTokens":     500,
+		"cacheReadTokens":  0,
+		"cacheWriteTokens": 0,
+		"totalTokens":      1500,
+		"estimatedCostUsd": 0.005,
+		"sessionId":        "sess-123",
+		"timestamp":        "2026-03-10T00:00:00Z",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestAgentHeartbeat_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("UpsertAgent", errTest)
+	resp := request(t, srv, http.MethodPost, "/api/v1/agents/err-agent/heartbeat", map[string]any{
+		"status": "online",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestAgentList_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListAgents", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/agents", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestAgentGet_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetAgent", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/agents/any-agent", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestAgentUsage_WithRelay(t *testing.T) {
+	// Spin up a stub relay that accepts usage reports.
+	relaySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer relaySrv.Close()
+
+	srv := newMockServerWithRelay(t, testToken, relaySrv.URL)
+	resp := request(t, srv, http.MethodPost, "/api/v1/agents/relay-agent/usage", map[string]any{
+		"model":            "claude-sonnet-4-6",
+		"inputTokens":      500,
+		"outputTokens":     250,
+		"cacheReadTokens":  0,
+		"cacheWriteTokens": 0,
+		"totalTokens":      750,
+		"estimatedCostUsd": 0.003,
+		"sessionId":        "sess-relay",
+		"timestamp":        "2026-03-10T00:00:00Z",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }

@@ -33,7 +33,8 @@ type claimExpirer interface {
 }
 
 // claimExpiryInterval is how often the background goroutine sweeps for expired claims.
-const claimExpiryInterval = time.Minute
+// It is a variable (not const) so tests can override it for fast-tick scenarios.
+var claimExpiryInterval = time.Minute
 
 // runClaimExpiry sweeps for and expires stale active claims on a fixed interval.
 // It runs until ctx is cancelled.

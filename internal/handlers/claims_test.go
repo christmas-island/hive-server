@@ -251,3 +251,57 @@ func TestRenewClaim_AlreadyReleased(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+func TestCreateClaim_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("CreateClaim", errTest)
+	resp := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type": "issue", "resource": "res", "expires_in": "1h",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetClaim_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetClaim", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/claims/no-such", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestListClaims_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListClaims", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/claims", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestReleaseClaim_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ReleaseClaim", errTest)
+	resp := request(t, srv, http.MethodDelete, "/api/v1/claims/no-such", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestRenewClaim_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("RenewClaim", errTest)
+	resp := request(t, srv, http.MethodPost, "/api/v1/claims/no-such/renew", map[string]any{
+		"expires_in": "1h",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}

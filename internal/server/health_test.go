@@ -9,72 +9,93 @@ import (
 	"testing"
 )
 
-type mockPinger struct{ err error }
+// mockPinger implements the pinger interface for testing.
+type mockPinger struct {
+	err error
+}
 
-func (m *mockPinger) Ping(_ context.Context) error { return m.err }
+func (m *mockPinger) Ping(_ context.Context) error {
+	return m.err
+}
 
 func TestHandleHealth(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/health", nil)
-	handleHealth(w, r)
+
+	handleHealth(w, req)
+
 	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	var body map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-	if body["status"] != "ok" {
-		t.Errorf("status = %q, want %q", body["status"], "ok")
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["status"] != "ok" {
+		t.Errorf("status = %q, want ok", resp["status"])
 	}
 }
 
 func TestHandleReady(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/ready", nil)
-	handleReady(w, r)
+
+	handleReady(w, req)
+
 	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	var body map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if body["status"] != "ready" {
-		t.Errorf("status = %q, want %q", body["status"], "ready")
+	if resp["status"] != "ready" {
+		t.Errorf("status = %q, want ready", resp["status"])
 	}
 }
 
-func TestHandleHealthz_OK(t *testing.T) {
-	h := healthzHandler(&mockPinger{})
+func TestHealthzHandler_Healthy(t *testing.T) {
+	p := &mockPinger{}
+	h := healthzHandler(p)
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	h(w, r)
+	h(w, req)
+
 	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	var body map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if body["status"] != "healthy" {
-		t.Errorf("status = %q, want %q", body["status"], "healthy")
+	if resp["status"] != "healthy" {
+		t.Errorf("status = %q, want healthy", resp["status"])
 	}
 }
 
-func TestHandleHealthz_Error(t *testing.T) {
-	h := healthzHandler(&mockPinger{err: errors.New("db down")})
+func TestHealthzHandler_Unhealthy(t *testing.T) {
+	p := &mockPinger{err: errors.New("connection refused")}
+	h := healthzHandler(p)
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	h(w, r)
+	h(w, req)
+
 	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want 503", w.Code)
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
-	var body map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if body["status"] != "unavailable" {
-		t.Errorf("status = %q, want %q", body["status"], "unavailable")
+	if resp["status"] != "unavailable" {
+		t.Errorf("status = %q, want unavailable", resp["status"])
+	}
+	if resp["error"] == "" {
+		t.Error("expected error message in response")
 	}
 }

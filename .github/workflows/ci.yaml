@@ -13,7 +13,7 @@ concurrency:
 env:
   # Fail the build if unit coverage drops below this percentage.
   # Target: 60% (see issue tracking ratchet-up). Current baseline: ~28%.
-  COVERAGE_THRESHOLD: "25"
+  COVERAGE_THRESHOLD: "42"
   # Fail the build if diff coverage on new/changed code drops below this percentage.
   DIFF_COVERAGE_THRESHOLD: "80"
 

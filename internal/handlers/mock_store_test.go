@@ -73,6 +73,9 @@ func (m *mockStore) consumeErr(method string) error {
 func (m *mockStore) UpsertMemory(_ context.Context, entry *model.MemoryEntry) (*model.MemoryEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("UpsertMemory"); err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	if entry.Tags == nil {
@@ -110,6 +113,9 @@ func (m *mockStore) UpsertMemory(_ context.Context, entry *model.MemoryEntry) (*
 func (m *mockStore) GetMemory(_ context.Context, key string) (*model.MemoryEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("GetMemory"); err != nil {
+		return nil, err
+	}
 
 	e, ok := m.memory[key]
 	if !ok {
@@ -121,6 +127,9 @@ func (m *mockStore) GetMemory(_ context.Context, key string) (*model.MemoryEntry
 func (m *mockStore) ListMemory(_ context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ListMemory"); err != nil {
+		return nil, err
+	}
 
 	var result []*model.MemoryEntry
 	for _, e := range m.memory {
@@ -149,6 +158,9 @@ func (m *mockStore) ListMemory(_ context.Context, f model.MemoryFilter) ([]*mode
 func (m *mockStore) DeleteMemory(_ context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("DeleteMemory"); err != nil {
+		return err
+	}
 
 	if _, ok := m.memory[key]; !ok {
 		return model.ErrNotFound
@@ -162,6 +174,9 @@ func (m *mockStore) DeleteMemory(_ context.Context, key string) error {
 func (m *mockStore) CreateTask(_ context.Context, t *model.Task) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("CreateTask"); err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	task := &model.Task{
@@ -188,6 +203,9 @@ func (m *mockStore) CreateTask(_ context.Context, t *model.Task) (*model.Task, e
 func (m *mockStore) GetTask(_ context.Context, id string) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("GetTask"); err != nil {
+		return nil, err
+	}
 
 	t, ok := m.tasks[id]
 	if !ok {
@@ -202,6 +220,9 @@ func (m *mockStore) GetTask(_ context.Context, id string) (*model.Task, error) {
 func (m *mockStore) ListTasks(_ context.Context, f model.TaskFilter) ([]*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ListTasks"); err != nil {
+		return nil, err
+	}
 
 	var result []*model.Task
 	for _, t := range m.tasks {
@@ -233,6 +254,9 @@ func (m *mockStore) ListTasks(_ context.Context, f model.TaskFilter) ([]*model.T
 func (m *mockStore) UpdateTask(_ context.Context, id string, upd model.TaskUpdate) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("UpdateTask"); err != nil {
+		return nil, err
+	}
 
 	t, ok := m.tasks[id]
 	if !ok {
@@ -268,6 +292,9 @@ func (m *mockStore) UpdateTask(_ context.Context, id string, upd model.TaskUpdat
 func (m *mockStore) DeleteTask(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("DeleteTask"); err != nil {
+		return err
+	}
 
 	if _, ok := m.tasks[id]; !ok {
 		return model.ErrNotFound
@@ -282,6 +309,9 @@ func (m *mockStore) DeleteTask(_ context.Context, id string) error {
 func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("UpsertAgent"); err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	if capabilities == nil {
@@ -311,7 +341,9 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 func (m *mockStore) GetAgent(_ context.Context, id string) (*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	if err := m.consumeErr("GetAgent"); err != nil {
+		return nil, err
+	}
 	a, ok := m.agents[id]
 	if !ok {
 		return nil, model.ErrNotFound
@@ -322,7 +354,9 @@ func (m *mockStore) GetAgent(_ context.Context, id string) (*model.Agent, error)
 func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	if err := m.consumeErr("ListAgents"); err != nil {
+		return nil, err
+	}
 	var result []*model.Agent
 	for _, a := range m.agents {
 		result = append(result, copyAgent(a))
@@ -335,6 +369,9 @@ func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 func (m *mockStore) UpsertChannel(_ context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("UpsertChannel"); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	c := *ch
 	if c.Members == nil {
@@ -382,6 +419,9 @@ func (m *mockStore) ListChannels(_ context.Context) ([]*model.DiscoveryChannel, 
 func (m *mockStore) DeleteChannel(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("DeleteChannel"); err != nil {
+		return err
+	}
 	if _, ok := m.channels[id]; !ok {
 		return model.ErrNotFound
 	}
@@ -392,6 +432,9 @@ func (m *mockStore) DeleteChannel(_ context.Context, id string) error {
 func (m *mockStore) UpsertRole(_ context.Context, role *model.DiscoveryRole) (*model.DiscoveryRole, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("UpsertRole"); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	r := *role
 	if r.Members == nil {
@@ -439,6 +482,9 @@ func (m *mockStore) ListRoles(_ context.Context) ([]*model.DiscoveryRole, error)
 func (m *mockStore) DeleteRole(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("DeleteRole"); err != nil {
+		return err
+	}
 	if _, ok := m.roles[id]; !ok {
 		return model.ErrNotFound
 	}
@@ -449,6 +495,9 @@ func (m *mockStore) DeleteRole(_ context.Context, id string) error {
 func (m *mockStore) UpsertAgentMeta(_ context.Context, id string, meta *model.DiscoveryAgentMeta) (*model.DiscoveryAgent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("UpsertAgentMeta"); err != nil {
+		return nil, err
+	}
 	agent, ok := m.agents[id]
 	if !ok {
 		return nil, model.ErrNotFound
@@ -520,6 +569,9 @@ func (m *mockStore) ListDiscoveryAgents(_ context.Context) ([]*model.DiscoveryAg
 func (m *mockStore) CreateClaim(_ context.Context, c *model.Claim) (*model.Claim, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("CreateClaim"); err != nil {
+		return nil, err
+	}
 
 	// Check for active claim on same resource.
 	for _, existing := range m.claims {
@@ -550,6 +602,9 @@ func (m *mockStore) CreateClaim(_ context.Context, c *model.Claim) (*model.Claim
 func (m *mockStore) GetClaim(_ context.Context, id string) (*model.Claim, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("GetClaim"); err != nil {
+		return nil, err
+	}
 
 	c, ok := m.claims[id]
 	if !ok {
@@ -561,6 +616,9 @@ func (m *mockStore) GetClaim(_ context.Context, id string) (*model.Claim, error)
 func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model.Claim, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ListClaims"); err != nil {
+		return nil, err
+	}
 
 	var result []*model.Claim
 	for _, c := range m.claims {
@@ -592,6 +650,9 @@ func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model
 func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.Claim, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ReleaseClaim"); err != nil {
+		return nil, err
+	}
 
 	c, ok := m.claims[id]
 	if !ok {
@@ -605,6 +666,9 @@ func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.Claim, er
 func (m *mockStore) RenewClaim(_ context.Context, id string, expiresAt time.Time) (*model.Claim, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("RenewClaim"); err != nil {
+		return nil, err
+	}
 
 	c, ok := m.claims[id]
 	if !ok {
