@@ -8,7 +8,7 @@ import (
 )
 
 func TestCreateClaim(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
 		"type":       "issue",
@@ -44,7 +44,7 @@ func TestCreateClaim(t *testing.T) {
 }
 
 func TestCreateClaim_MissingAgentID(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	resp := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
 		"type":     "issue",
@@ -57,7 +57,7 @@ func TestCreateClaim_MissingAgentID(t *testing.T) {
 }
 
 func TestCreateClaim_Conflict(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// First claim succeeds.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
@@ -81,7 +81,7 @@ func TestCreateClaim_Conflict(t *testing.T) {
 }
 
 func TestGetClaim(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// Create.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
@@ -104,7 +104,7 @@ func TestGetClaim(t *testing.T) {
 }
 
 func TestGetClaim_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodGet, "/api/v1/claims/no-such-id", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -113,7 +113,7 @@ func TestGetClaim_NotFound(t *testing.T) {
 }
 
 func TestListClaims(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	for _, res := range []string{"a#1", "a#2", "a#3"} {
 		request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
@@ -134,7 +134,7 @@ func TestListClaims(t *testing.T) {
 }
 
 func TestListClaims_FilterStatus(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// Create and release one claim.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
@@ -163,7 +163,7 @@ func TestListClaims_FilterStatus(t *testing.T) {
 }
 
 func TestReleaseClaim(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
 		"type":     "conch",
@@ -184,7 +184,7 @@ func TestReleaseClaim(t *testing.T) {
 }
 
 func TestReleaseClaim_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodDelete, "/api/v1/claims/ghost", nil, testToken, testAgent)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -193,7 +193,7 @@ func TestReleaseClaim_NotFound(t *testing.T) {
 }
 
 func TestRenewClaim(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
 		"type":       "issue",
@@ -220,7 +220,7 @@ func TestRenewClaim(t *testing.T) {
 }
 
 func TestRenewClaim_NotFound(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 	resp := request(t, srv, http.MethodPatch, "/api/v1/claims/ghost", map[string]any{
 		"expires_in": "1h",
 	}, testToken, testAgent)
@@ -231,7 +231,7 @@ func TestRenewClaim_NotFound(t *testing.T) {
 }
 
 func TestRenewClaim_AlreadyReleased(t *testing.T) {
-	srv := newTestServer(t, testToken)
+	srv := newMockServerWithToken(t, testToken)
 
 	// Create and release.
 	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
