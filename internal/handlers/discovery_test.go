@@ -345,3 +345,69 @@ func TestDiscoveryGetRoutingNotFound(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+func TestListDiscoveryAgents_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListDiscoveryAgents", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/agents", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestPutAgentMeta_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("UpsertAgentMeta", errTest)
+	resp := request(t, srv, http.MethodPut, "/api/v1/discovery/agents/agt/meta", map[string]any{
+		"discord_user_id": "123",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestListChannels_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListChannels", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/channels", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestPutChannel_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("UpsertChannel", errTest)
+	resp := request(t, srv, http.MethodPut, "/api/v1/discovery/channels/general", map[string]any{
+		"name": "general",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestListRoles_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListRoles", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/roles", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestPutRole_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("UpsertRole", errTest)
+	resp := request(t, srv, http.MethodPut, "/api/v1/discovery/roles/admin", map[string]any{
+		"name": "Admin",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}

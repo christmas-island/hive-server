@@ -4,18 +4,44 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/christmas-island/hive-server/internal/handlers"
+	"github.com/christmas-island/hive-server/internal/relay"
 )
+
+// errTest is a sentinel error used in store error injection tests.
+var errTest = errors.New("injected test error")
 
 // newMockServerWithToken creates an httptest server backed by an in-memory mockStore
 // with the given bearer token. No database connection required.
 func newMockServerWithToken(t *testing.T, token string) *httptest.Server {
 	t.Helper()
 	h := handlers.New(newMockStore(), token, nil)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// newMockServerWithStore creates an httptest server and returns both the server
+// and the underlying mockStore for error injection.
+func newMockServerWithStore(t *testing.T, token string) (*httptest.Server, *mockStore) {
+	t.Helper()
+	ms := newMockStore()
+	h := handlers.New(ms, token, nil)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return srv, ms
+}
+
+// newMockServerWithRelay creates an httptest server with both a mock store and a relay client.
+func newMockServerWithRelay(t *testing.T, token string, relayURL string) *httptest.Server {
+	t.Helper()
+	rc := relay.New(relayURL, "relay-token")
+	h := handlers.New(newMockStore(), token, rc)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv

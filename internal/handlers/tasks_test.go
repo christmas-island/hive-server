@@ -242,3 +242,57 @@ func TestTaskDelete_NotFound(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+func TestCreateTask_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("CreateTask", errTest)
+	resp := request(t, srv, http.MethodPost, "/api/v1/tasks", map[string]any{
+		"title": "test task",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetTask_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetTask", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/tasks/no-such", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestListTasks_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ListTasks", errTest)
+	resp := request(t, srv, http.MethodGet, "/api/v1/tasks", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateTask_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("UpdateTask", errTest)
+	resp := request(t, srv, http.MethodPatch, "/api/v1/tasks/no-such", map[string]any{
+		"status": "in_progress",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteTask_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("DeleteTask", errTest)
+	resp := request(t, srv, http.MethodDelete, "/api/v1/tasks/no-such", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}

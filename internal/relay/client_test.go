@@ -130,3 +130,21 @@ func TestRecordUsage_ErrorResponse(t *testing.T) {
 		t.Fatalf("expected nil error on non-2xx, got %v", err)
 	}
 }
+
+func TestUpdateStatus_NetworkError(t *testing.T) {
+	// Use a URL that immediately refuses connection to trigger a network error in do().
+	c := New("http://127.0.0.1:1", "tok")
+	// UpdateStatus doesn't return errors (best-effort), so just verify no panic.
+	err := c.UpdateStatus(context.Background(), "agent-1", "online", "")
+	if err != nil {
+		t.Fatalf("expected nil (best-effort), got: %v", err)
+	}
+}
+
+func TestRecordUsage_NetworkError(t *testing.T) {
+	c := New("http://127.0.0.1:1", "tok")
+	err := c.RecordUsage(context.Background(), "agent-1", UsageReport{})
+	if err != nil {
+		t.Fatalf("expected nil (best-effort), got: %v", err)
+	}
+}

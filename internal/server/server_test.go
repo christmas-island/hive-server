@@ -54,10 +54,15 @@ type mockClaimExpirer struct {
 	calls   atomic.Int64
 	expired int64
 	err     error
+	// fn overrides the default behaviour when set.
+	fn func(context.Context) (int64, error)
 }
 
-func (m *mockClaimExpirer) ExpireOldClaims(_ context.Context) (int64, error) {
+func (m *mockClaimExpirer) ExpireOldClaims(ctx context.Context) (int64, error) {
 	m.calls.Add(1)
+	if m.fn != nil {
+		return m.fn(ctx)
+	}
 	return m.expired, m.err
 }
 
@@ -113,4 +118,90 @@ func TestConfig_ZeroValue(t *testing.T) {
 	if cfg.DatabaseURL != "" {
 		t.Errorf("default DatabaseURL = %q, want empty", cfg.DatabaseURL)
 	}
+}
+
+func TestRun_InvalidDatabaseURL(t *testing.T) {
+	// Run() should return an error if the database URL is invalid / unreachable.
+	// This tests the error path through store.New().
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New(Config{
+		DatabaseURL: "postgresql://invalid:badpass@localhost:1/doesnotexist?sslmode=disable",
+		BindAddr:    "127.0.0.1:0",
+	})
+
+	err := srv.Run(ctx)
+	if err == nil {
+		t.Fatal("expected error from Run() with invalid database URL, got nil")
+	}
+}
+
+func TestRunClaimExpiry_TickerPath_Success(t *testing.T) {
+	// Override the interval to a very short duration so we hit the ticker case.
+	orig := claimExpiryInterval
+	claimExpiryInterval = 5 * time.Millisecond
+	defer func() { claimExpiryInterval = orig }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	called := make(chan struct{}, 5)
+	ce := &mockClaimExpirer{
+		fn: func(ctx context.Context) (int64, error) {
+			select {
+			case called <- struct{}{}:
+			default:
+			}
+			return 3, nil // >0 triggers the log.Info path
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runClaimExpiry(ctx, ce)
+		close(done)
+	}()
+
+	// Wait for at least one tick.
+	select {
+	case <-called:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for claim expiry tick")
+	}
+	cancel()
+	<-done
+}
+
+func TestRunClaimExpiry_TickerPath_ZeroExpired(t *testing.T) {
+	// n == 0 takes a different branch (no log.Info)
+	orig := claimExpiryInterval
+	claimExpiryInterval = 5 * time.Millisecond
+	defer func() { claimExpiryInterval = orig }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	called := make(chan struct{}, 5)
+	ce := &mockClaimExpirer{
+		fn: func(ctx context.Context) (int64, error) {
+			select {
+			case called <- struct{}{}:
+			default:
+			}
+			return 0, nil // zero items expired
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runClaimExpiry(ctx, ce)
+		close(done)
+	}()
+
+	select {
+	case <-called:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for tick")
+	}
+	cancel()
+	<-done
 }
