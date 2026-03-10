@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> **Read [GUIDANCE.md](GUIDANCE.md) first** — it defines the guiding principles,
+> decision authority, and conflict resolution for all v5 work.
+
 hive-server: REST API for cross-agent memory and task coordination. CockroachDB-backed, single binary.
 
 ## Structure
