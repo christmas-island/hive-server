@@ -87,3 +87,87 @@ jobs:
           DOCKER_USERNAME: ${{ github.actor }}
           DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
+
+  build:
+    name: Build and push SHA image
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    outputs:
+      sha-tag: sha-${{ steps.sha.outputs.short }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@902fa8ec7d6ecbea8a65e5af3b1b9c6bce74d576 # v5
+        id: meta
+        with:
+          images: ghcr.io/christmas-island/hive-server
+          tags: |
+            type=sha
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  update-k8s-manifests:
+    name: Update k8s manifests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.CHRISTMAS_ISLAND_APP_ID }}
+          private-key: ${{ secrets.CHRISTMAS_ISLAND_PRIVATE_KEY }}
+          owner: christmas-island
+
+      - name: Checkout k8s repo
+        uses: actions/checkout@v4
+        with:
+          repository: christmas-island/k8s
+          token: ${{ steps.app-token.outputs.token }}
+          path: k8s
+
+      - name: Update hive-server image tag
+        run: |
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          cd k8s
+          sed -i "s|ghcr.io/christmas-island/hive-server:.*|ghcr.io/christmas-island/hive-server:sha-${SHA}|g" hive-server/01-deployment.yaml
+
+      - name: Create deploy PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          cd k8s
+          BRANCH="deploy/hive-server-sha-${SHA}"
+          git config user.name "christmas-island[bot]"
+          git config user.email "christmas-island[bot]@users.noreply.github.com"
+          git diff --quiet && echo "No changes to commit" && exit 0
+          git checkout -b "${BRANCH}"
+          git add hive-server/
+          git commit -m "chore: bump hive-server to sha-${SHA} [skip ci]"
+          git push --force origin "${BRANCH}"
+          gh pr create \
+            --repo christmas-island/k8s \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore: bump hive-server to sha-${SHA}" \
+            --body $'Automated image tag update from CI.\n\nSource: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}' \
+          || echo "PR already exists for ${BRANCH}"
