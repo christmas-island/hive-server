@@ -1,5 +1,7 @@
 # Hive-Server v5: Build Graph (v3)
 
+> Guiding principles: [GUIDANCE.md](../GUIDANCE.md) · Decisions: [context/decisions/](decisions/)
+
 ## What We're Building
 
 A behavioral knowledge engine. It ingests skill documents (large markdown prompt libraries like GSD, Superpowers, Allium), decomposes them into atomic behavioral directives via LLM, stores those directives across three purpose-built databases, and recomposes contextually relevant subsets into micro-prompt snippets injected into agent conversations at runtime.
