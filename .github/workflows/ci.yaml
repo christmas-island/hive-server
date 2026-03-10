@@ -10,6 +10,11 @@ concurrency:
   group: ci-${{ github.event.number || 'main' }}
   cancel-in-progress: true
 
+env:
+  # Fail the build if unit coverage drops below this percentage.
+  # Raise this as the test suite improves.
+  COVERAGE_THRESHOLD: "50"
+
 jobs:
   lint:
     name: Lint
@@ -37,7 +42,35 @@ jobs:
       - name: Run tests with coverage
         run: go test -v -coverprofile=coverage.out -covermode=atomic ./...
       - name: Generate coverage report
-        run: go tool cover -func=coverage.out | tee coverage.txt
+        run: |
+          go tool cover -func=coverage.out | tee coverage.txt
+          go tool cover -html=coverage.out -o coverage.html
+      - name: Enforce coverage threshold
+        run: |
+          total=$(grep '^total:' coverage.txt | awk '{print $NF}' | tr -d '%')
+          echo "Unit coverage: ${total}% (threshold: ${COVERAGE_THRESHOLD}%)"
+          if awk "BEGIN {exit !($total < $COVERAGE_THRESHOLD)}"; then
+            echo "❌ Coverage ${total}% is below threshold ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+          echo "✅ Coverage ${total}% meets threshold ${COVERAGE_THRESHOLD}%"
+      - name: Upload coverage HTML artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+            coverage.txt
+          retention-days: 30
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          flags: unit
+          fail_ci_if_error: false  # don't block PRs if Codecov is unreachable
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Post coverage comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -47,12 +80,15 @@ jobs:
             const coverage = fs.readFileSync('coverage.txt', 'utf8');
             const totalLine = coverage.split('\n').find(l => l.startsWith('total:'));
             const total = totalLine ? totalLine.split(/\s+/).pop() : 'unknown';
+            const totalNum = parseFloat(total);
+            const threshold = parseInt(process.env.COVERAGE_THRESHOLD, 10);
+            const status = !isNaN(totalNum) && totalNum >= threshold ? '✅' : '❌';
             const body = [
               '## 📊 Code Coverage',
               '```',
               coverage.trim(),
               '```',
-              `**Total: ${total}**`,
+              `**Total: ${total}** ${status} _(threshold: ${threshold}%)_`,
             ].join('\n');
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -90,6 +126,22 @@ jobs:
         run: go test -v -race -count=1 -tags integration -timeout 300s -coverprofile=coverage-integration.out -covermode=atomic ./...
       - name: Generate integration coverage report
         run: go tool cover -func=coverage-integration.out | tee coverage-integration.txt
+      - name: Upload integration coverage artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-integration-report
+          path: |
+            coverage-integration.out
+            coverage-integration.txt
+          retention-days: 30
+      - name: Upload integration coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage-integration.out
+          flags: integration
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Post integration coverage comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
