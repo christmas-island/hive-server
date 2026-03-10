@@ -24,6 +24,10 @@ type mockStore struct {
 	channels        map[string]*model.DiscoveryChannel
 	roles           map[string]*model.DiscoveryRole
 	claims          map[string]*model.Claim
+
+	// forceErr maps a method name to an error that will be returned on the
+	// next call (consumed once). Use injectErr to set it.
+	forceErr map[string]error
 }
 
 type noteMeta struct {
@@ -42,7 +46,26 @@ func newMockStore() *mockStore {
 		channels:        make(map[string]*model.DiscoveryChannel),
 		roles:           make(map[string]*model.DiscoveryRole),
 		claims:          make(map[string]*model.Claim),
+		forceErr:        make(map[string]error),
 	}
+}
+
+// injectErr registers an error to be returned by the named method (consumed once).
+// Must be called before the request that should trigger the error.
+func (m *mockStore) injectErr(method string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.forceErr[method] = err
+}
+
+// consumeErr pops and returns the injected error for a method, or nil.
+// Must be called with m.mu held.
+func (m *mockStore) consumeErr(method string) error {
+	if err, ok := m.forceErr[method]; ok {
+		delete(m.forceErr, method)
+		return err
+	}
+	return nil
 }
 
 // --- Memory ---
@@ -331,6 +354,9 @@ func (m *mockStore) UpsertChannel(_ context.Context, ch *model.DiscoveryChannel)
 func (m *mockStore) GetChannel(_ context.Context, id string) (*model.DiscoveryChannel, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("GetChannel"); err != nil {
+		return nil, err
+	}
 	ch, ok := m.channels[id]
 	if !ok {
 		return nil, model.ErrNotFound
@@ -342,6 +368,9 @@ func (m *mockStore) GetChannel(_ context.Context, id string) (*model.DiscoveryCh
 func (m *mockStore) ListChannels(_ context.Context) ([]*model.DiscoveryChannel, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ListChannels"); err != nil {
+		return nil, err
+	}
 	var result []*model.DiscoveryChannel
 	for _, ch := range m.channels {
 		c := *ch
@@ -382,6 +411,9 @@ func (m *mockStore) UpsertRole(_ context.Context, role *model.DiscoveryRole) (*m
 func (m *mockStore) GetRole(_ context.Context, id string) (*model.DiscoveryRole, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("GetRole"); err != nil {
+		return nil, err
+	}
 	r, ok := m.roles[id]
 	if !ok {
 		return nil, model.ErrNotFound
@@ -393,6 +425,9 @@ func (m *mockStore) GetRole(_ context.Context, id string) (*model.DiscoveryRole,
 func (m *mockStore) ListRoles(_ context.Context) ([]*model.DiscoveryRole, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ListRoles"); err != nil {
+		return nil, err
+	}
 	var result []*model.DiscoveryRole
 	for _, r := range m.roles {
 		role := *r
@@ -436,6 +471,9 @@ func (m *mockStore) UpsertAgentMeta(_ context.Context, id string, meta *model.Di
 func (m *mockStore) GetDiscoveryAgent(_ context.Context, id string) (*model.DiscoveryAgent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("GetDiscoveryAgent"); err != nil {
+		return nil, err
+	}
 	agent, ok := m.agents[id]
 	if !ok {
 		return nil, model.ErrNotFound
@@ -457,6 +495,9 @@ func (m *mockStore) GetDiscoveryAgent(_ context.Context, id string) (*model.Disc
 func (m *mockStore) ListDiscoveryAgents(_ context.Context) ([]*model.DiscoveryAgent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.consumeErr("ListDiscoveryAgents"); err != nil {
+		return nil, err
+	}
 	var result []*model.DiscoveryAgent
 	for id, agent := range m.agents {
 		if da, ok := m.discoveryAgents[id]; ok {

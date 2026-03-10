@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,6 +41,23 @@ func TestDiscoveryListAgents(t *testing.T) {
 	}
 }
 
+func TestDiscoveryGetAgent(t *testing.T) {
+	srv, ms := newMockServer(t)
+
+	ctx := t.Context()
+	_, _ = ms.Heartbeat(ctx, "smokeyclaw", []string{"memory"}, model.AgentStatusOnline)
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/agents/smokeyclaw", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var da map[string]any
+	decodeJSON(t, resp, &da)
+	if da["id"] != "smokeyclaw" {
+		t.Errorf("id = %v, want smokeyclaw", da["id"])
+	}
+}
+
 func TestDiscoveryGetAgentNotFound(t *testing.T) {
 	srv, _ := newMockServer(t)
 
@@ -47,6 +65,28 @@ func TestDiscoveryGetAgentNotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryGetAgent_StoreError(t *testing.T) {
+	srv, ms := newMockServer(t)
+	ms.injectErr("GetDiscoveryAgent", errors.New("db unavailable"))
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/agents/any-agent", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryListAgents_StoreError(t *testing.T) {
+	srv, ms := newMockServer(t)
+	ms.injectErr("ListDiscoveryAgents", errors.New("db unavailable"))
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/agents", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
 
@@ -131,6 +171,23 @@ func TestDiscoveryPutChannel(t *testing.T) {
 	}
 }
 
+func TestDiscoveryGetChannel(t *testing.T) {
+	srv, ms := newMockServer(t)
+
+	ctx := t.Context()
+	_, _ = ms.UpsertChannel(ctx, &model.DiscoveryChannel{ID: "allclaws", Name: "All Claws"})
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/channels/allclaws", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var ch map[string]any
+	decodeJSON(t, resp, &ch)
+	if ch["id"] != "allclaws" {
+		t.Errorf("id = %v, want allclaws", ch["id"])
+	}
+}
+
 func TestDiscoveryGetChannelNotFound(t *testing.T) {
 	srv, _ := newMockServer(t)
 
@@ -138,6 +195,28 @@ func TestDiscoveryGetChannelNotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryGetChannel_StoreError(t *testing.T) {
+	srv, ms := newMockServer(t)
+	ms.injectErr("GetChannel", errors.New("db unavailable"))
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/channels/any-channel", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryListChannels_StoreError(t *testing.T) {
+	srv, ms := newMockServer(t)
+	ms.injectErr("ListChannels", errors.New("db unavailable"))
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/channels", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
 
@@ -176,6 +255,55 @@ func TestDiscoveryPutRole(t *testing.T) {
 	decodeJSON(t, resp, &role)
 	if role["id"] != "agents" {
 		t.Errorf("id = %v, want agents", role["id"])
+	}
+}
+
+func TestDiscoveryGetRole(t *testing.T) {
+	srv, ms := newMockServer(t)
+
+	ctx := t.Context()
+	_, _ = ms.UpsertRole(ctx, &model.DiscoveryRole{ID: "agents", Name: "Agents"})
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/roles/agents", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var role map[string]any
+	decodeJSON(t, resp, &role)
+	if role["id"] != "agents" {
+		t.Errorf("id = %v, want agents", role["id"])
+	}
+}
+
+func TestDiscoveryGetRoleNotFound(t *testing.T) {
+	srv, _ := newMockServer(t)
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/roles/nonexistent", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryGetRole_StoreError(t *testing.T) {
+	srv, ms := newMockServer(t)
+	ms.injectErr("GetRole", errors.New("db unavailable"))
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/roles/any-role", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestDiscoveryListRoles_StoreError(t *testing.T) {
+	srv, ms := newMockServer(t)
+	ms.injectErr("ListRoles", errors.New("db unavailable"))
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/roles", nil, "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
 	}
 }
 

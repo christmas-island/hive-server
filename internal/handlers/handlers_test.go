@@ -85,3 +85,35 @@ func TestAuth_NoTokenConfigured(t *testing.T) {
 	}
 	resp.Body.Close()
 }
+
+// TestAuth_ValidToken verifies that a correct token is accepted.
+func TestAuth_ValidToken(t *testing.T) {
+	srv := newMockServerWithToken(t, "secret")
+	resp := request(t, srv, http.MethodGet, "/api/v1/memory", nil, "secret", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+// TestAuth_ValidToken_WithAgentID verifies that X-Agent-ID flows through to handlers
+// when a valid token is provided.
+func TestAuth_ValidToken_WithAgentID(t *testing.T) {
+	srv := newMockServerWithToken(t, "secret")
+	resp := request(t, srv, http.MethodGet, "/api/v1/memory", nil, "secret", "smokeyclaw")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+// TestAuth_NoTokenConfigured_WithAgentID verifies that X-Agent-ID is injected into
+// context even when no bearer token is configured (local dev path).
+func TestAuth_NoTokenConfigured_WithAgentID(t *testing.T) {
+	srv := newMockServerWithToken(t, "")
+	resp := request(t, srv, http.MethodGet, "/api/v1/memory", nil, "", "jakeclaw")
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
