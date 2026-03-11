@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 )
 
 // UpsertMemory creates or updates a memory entry.
 // If version > 0 in entry, it performs an optimistic concurrency check.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*model.MemoryEntry, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	now := time.Now().UTC()
 	if entry.Tags == nil {
 		entry.Tags = []string{}
@@ -102,6 +104,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*mo
 
 // GetMemory retrieves a single memory entry by key.
 func (s *Store) GetMemory(ctx context.Context, key string) (*model.MemoryEntry, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 		key,
@@ -111,6 +114,7 @@ func (s *Store) GetMemory(ctx context.Context, key string) (*model.MemoryEntry, 
 
 // ListMemory returns memory entries matching the filter.
 func (s *Store) ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	q := `SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1`
 	args := []any{}
 	argIdx := 1
@@ -167,6 +171,7 @@ func (s *Store) ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.
 // DeleteMemory removes a memory entry by key.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) DeleteMemory(ctx context.Context, key string) error {
+	defer timing.TrackDB(ctx, time.Now())
 	return s.RetryTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM memory WHERE key = $1`, key)
 		if err != nil {
