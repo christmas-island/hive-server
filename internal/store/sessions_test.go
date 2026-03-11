@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
-	"github.com/christmas-island/hive-server/internal/store"
 )
 
 func makeTestSession(agentID, repo string) *model.CapturedSession {
@@ -167,8 +166,3 @@ func TestCreateCapturedSession_WithSubagentHierarchy(t *testing.T) {
 		t.Errorf("ParentSessionID = %q, want %q", got.ParentSessionID, createdParent.ID)
 	}
 }
-
-// Ensure the store.Store implements the store.Store interface for captured sessions.
-var _ interface {
-	CreateCapturedSession(ctx interface{ Deadline() (interface{}, bool); Done() <-chan struct{}; Err() error; Value(interface{}) interface{} }, s *model.CapturedSession) (*model.CapturedSession, error)
-} = (*store.Store)(nil)
