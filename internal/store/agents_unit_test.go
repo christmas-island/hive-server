@@ -20,11 +20,11 @@ func TestGetAgent_Success(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("agent1", "Agent One", "online", `["memory"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("agent1", "Agent One", "online", `["memory"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
 	got, err := s.GetAgent(context.Background(), "agent1")
@@ -46,10 +46,10 @@ func TestGetAgent_NotFound(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"})
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"})
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("missing").WillReturnRows(rows)
 
 	_, err := s.GetAgent(context.Background(), "missing")
@@ -67,7 +67,7 @@ func TestGetAgent_QueryError(t *testing.T) {
 
 	dbErr := errors.New("connection lost")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnError(dbErr)
 
 	_, err := s.GetAgent(context.Background(), "agent1")
@@ -84,11 +84,11 @@ func TestGetAgent_StaleHeartbeatOffline(t *testing.T) {
 	s := &Store{db: db}
 
 	stale := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339Nano)
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("agent1", "Agent One", "online", `[]`, stale, stale)
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("agent1", "Agent One", "online", `[]`, stale, stale, "")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
 	got, err := s.GetAgent(context.Background(), "agent1")
@@ -107,12 +107,12 @@ func TestListAgents_Success(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("a1", "Agent 1", "online", `["tasks"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
-		AddRow("a2", "Agent 2", "idle", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("a1", "Agent 1", "online", `["tasks"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "").
+		AddRow("a2", "Agent 2", "idle", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents ORDER BY id ASC`,
 	)).WillReturnRows(rows)
 
 	got, err := s.ListAgents(context.Background())
@@ -131,10 +131,10 @@ func TestListAgents_Empty(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"})
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"})
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents ORDER BY id ASC`,
 	)).WillReturnRows(rows)
 
 	got, err := s.ListAgents(context.Background())
@@ -152,7 +152,7 @@ func TestListAgents_QueryError(t *testing.T) {
 
 	dbErr := errors.New("query failed")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents ORDER BY id ASC`,
 	)).WillReturnError(dbErr)
 
 	_, err := s.ListAgents(context.Background())
@@ -169,7 +169,7 @@ func TestListAgents_ScanError(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"id"}).AddRow("a1")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents ORDER BY id ASC`,
 	)).WillReturnRows(rows)
 
 	_, err := s.ListAgents(context.Background())
@@ -189,18 +189,18 @@ func TestHeartbeat_Success(t *testing.T) {
 	// Transaction: Begin + Exec + Commit
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)`,
+		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	// GetAgent follow-up query
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("agent1", "agent1", "online", `["tasks"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("agent1", "agent1", "online", `["tasks"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
-	got, err := s.Heartbeat(context.Background(), "agent1", []string{"tasks"}, model.AgentStatusOnline)
+	got, err := s.Heartbeat(context.Background(), "agent1", []string{"tasks"}, model.AgentStatusOnline, "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -220,17 +220,17 @@ func TestHeartbeat_NilCapabilities(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)`,
+		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("a2", "a2", "online", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("a2", "a2", "online", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("a2").WillReturnRows(rows)
 
-	got, err := s.Heartbeat(context.Background(), "a2", nil, model.AgentStatusOnline)
+	got, err := s.Heartbeat(context.Background(), "a2", nil, model.AgentStatusOnline, "")
 	if err != nil {
 		t.Fatalf("Heartbeat with nil caps: %v", err)
 	}
@@ -246,11 +246,11 @@ func TestHeartbeat_ExecError(t *testing.T) {
 	dbErr := errors.New("exec error")
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)`,
+		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version)`,
 	)).WillReturnError(dbErr)
 	mock.ExpectRollback()
 
-	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline)
+	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -265,17 +265,17 @@ func TestHeartbeat_GetAgentNotFound(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at)`,
+		`INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	// GetAgent returns no rows
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"})
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"})
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
-	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline)
+	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline, "")
 	if !errors.Is(err, model.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -293,11 +293,11 @@ func TestHeartbeat_SQLMatchesSource(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO agents`).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("x", "x", "online", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("x", "x", "online", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 	mock.ExpectQuery(`SELECT id, name`).WithArgs("x").WillReturnRows(rows)
 
-	_, err := s.Heartbeat(context.Background(), "x", []string{}, model.AgentStatusOnline)
+	_, err := s.Heartbeat(context.Background(), "x", []string{}, model.AgentStatusOnline, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -312,12 +312,12 @@ func TestListAgents_RowsErr(t *testing.T) {
 	s := &Store{db: db}
 
 	rowsErr := errors.New("rows iteration error")
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("a1", "Agent 1", "online", `[]`, time.Now().Format(time.RFC3339Nano), time.Now().Format(time.RFC3339Nano)).
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("a1", "Agent 1", "online", `[]`, time.Now().Format(time.RFC3339Nano), time.Now().Format(time.RFC3339Nano), "").
 		RowError(0, rowsErr)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents ORDER BY id ASC`,
 	)).WillReturnRows(rows)
 
 	_, err := s.ListAgents(context.Background())
@@ -343,11 +343,11 @@ func TestGetAgent_CapabilitiesNullJSON(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("agent1", "Agent One", "online", `null`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("agent1", "Agent One", "online", `null`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
 	got, err := s.GetAgent(context.Background(), "agent1")
@@ -365,13 +365,13 @@ func TestListAgents_MultipleAgents(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at"}).
-		AddRow("a1", "Alpha", "online", `["cap1"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
-		AddRow("a2", "Beta", "offline", `[]`, now.Add(-time.Hour).Format(time.RFC3339Nano), now.Add(-time.Hour).Format(time.RFC3339Nano)).
-		AddRow("a3", "Gamma", "idle", `["cap2","cap3"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "capabilities", "last_heartbeat", "registered_at", "hive_local_version"}).
+		AddRow("a1", "Alpha", "online", `["cap1"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "").
+		AddRow("a2", "Beta", "offline", `[]`, now.Add(-time.Hour).Format(time.RFC3339Nano), now.Add(-time.Hour).Format(time.RFC3339Nano), "").
+		AddRow("a3", "Gamma", "idle", `["cap2","cap3"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents ORDER BY id ASC`,
 	)).WillReturnRows(rows)
 
 	got, err := s.ListAgents(context.Background())
@@ -395,7 +395,7 @@ func TestGetAgent_NilRowValue(t *testing.T) {
 	s := &Store{db: db}
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
+		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnError(sql.ErrNoRows)
 
 	_, err := s.GetAgent(context.Background(), "agent1")

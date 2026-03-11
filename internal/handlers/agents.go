@@ -16,8 +16,9 @@ import (
 type agentHeartbeatInput struct {
 	ID   string `path:"id" doc:"Agent ID"`
 	Body struct {
-		Capabilities []string `json:"capabilities,omitempty" doc:"Agent capability list"`
-		Status       string   `json:"status,omitempty" doc:"Agent status: online or idle (defaults to online)"`
+		Capabilities     []string `json:"capabilities,omitempty" doc:"Agent capability list"`
+		Status           string   `json:"status,omitempty" doc:"Agent status: online or idle (defaults to online)"`
+		HiveLocalVersion string   `json:"hive_local_version,omitempty" doc:"Semver string of the hive-local binary (e.g. '2.0.0')"`
 	}
 }
 
@@ -65,7 +66,7 @@ func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*
 		status = model.AgentStatusOnline
 	}
 
-	agent, err := a.store.Heartbeat(ctx, input.ID, input.Body.Capabilities, status)
+	agent, err := a.store.Heartbeat(ctx, input.ID, input.Body.Capabilities, status, input.Body.HiveLocalVersion)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to record heartbeat")
 	}

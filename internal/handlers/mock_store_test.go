@@ -322,7 +322,7 @@ func (m *mockStore) DeleteTask(_ context.Context, id string) error {
 
 // --- Agents ---
 
-func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error) {
+func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status model.AgentStatus, hiveLocalVersion string) (*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.consumeErr("UpsertAgent"); err != nil {
@@ -337,12 +337,13 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 	existing, ok := m.agents[id]
 	if !ok {
 		agent := &model.Agent{
-			ID:            id,
-			Name:          id,
-			Status:        status,
-			Capabilities:  capabilities,
-			LastHeartbeat: now,
-			RegisteredAt:  now,
+			ID:               id,
+			Name:             id,
+			Status:           status,
+			Capabilities:     capabilities,
+			LastHeartbeat:    now,
+			RegisteredAt:     now,
+			HiveLocalVersion: hiveLocalVersion,
 		}
 		m.agents[id] = agent
 		return copyAgent(agent), nil
@@ -351,6 +352,7 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 	existing.Status = status
 	existing.Capabilities = capabilities
 	existing.LastHeartbeat = now
+	existing.HiveLocalVersion = hiveLocalVersion
 	return copyAgent(existing), nil
 }
 
@@ -785,12 +787,13 @@ func copyAgent(a *model.Agent) *model.Agent {
 	caps := make([]string, len(a.Capabilities))
 	copy(caps, a.Capabilities)
 	return &model.Agent{
-		ID:            a.ID,
-		Name:          a.Name,
-		Status:        a.Status,
-		Capabilities:  caps,
-		LastHeartbeat: a.LastHeartbeat,
-		RegisteredAt:  a.RegisteredAt,
+		ID:               a.ID,
+		Name:             a.Name,
+		Status:           a.Status,
+		Capabilities:     caps,
+		LastHeartbeat:    a.LastHeartbeat,
+		RegisteredAt:     a.RegisteredAt,
+		HiveLocalVersion: a.HiveLocalVersion,
 	}
 }
 
