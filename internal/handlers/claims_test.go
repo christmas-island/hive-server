@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
 )
@@ -401,5 +402,75 @@ func TestReleaseClaim_WithNextWaiter(t *testing.T) {
 	}
 	if result.Next != nil && result.Next.AgentID != "next-agent" {
 		t.Errorf("next.AgentID = %q, want next-agent", result.Next.AgentID)
+	}
+}
+
+func TestCreateClaim_QueueError(t *testing.T) {
+	// When EnqueueClaim fails, handler should return 500.
+	srv, ms := newMockServerWithStore(t, testToken)
+
+	// Seed an existing claim so the next one hits conflict → queue path.
+	ms.mu.Lock()
+	ms.claims["existing-c"] = &model.Claim{
+		ID:        "existing-c",
+		Type:      model.ClaimTypeConch,
+		Resource:  "conch#err-resource",
+		AgentID:   "other-agent",
+		Status:    model.ClaimStatusActive,
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}
+	ms.mu.Unlock()
+
+	ms.injectErr("EnqueueClaim", errTest)
+	// Inject conflict for CreateClaim (the mock returns conflict when resource is active).
+	// The mock's CreateClaim checks the claims map — we need CreateClaim to return ErrConflict.
+	// Since the mock creates a real ID and doesn't check existing, we inject err directly.
+	ms.injectErr("CreateClaim", model.ErrConflict)
+
+	resp := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "conch",
+		"resource": "conch#err-resource",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestReleaseClaim_Forbidden(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	// Create a claim as testAgent.
+	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "conch",
+		"resource": "#forbidden-test",
+	}, testToken, testAgent)
+	var holder struct{ ID string `json:"id"` }
+	decodeJSON(t, r1, &holder)
+
+	// Try to release as a different agent.
+	resp := request(t, srv, http.MethodDelete, "/api/v1/claims/"+holder.ID, nil, testToken, "other-agent")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestRenewClaim_Forbidden(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "review",
+		"resource": "pr#renew-forbidden",
+	}, testToken, testAgent)
+	var holder struct{ ID string `json:"id"` }
+	decodeJSON(t, r1, &holder)
+
+	resp := request(t, srv, http.MethodPatch, "/api/v1/claims/"+holder.ID, map[string]any{
+		"expires_in": "1h",
+	}, testToken, "other-agent")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", resp.StatusCode)
 	}
 }

@@ -838,3 +838,48 @@ func TestExpireOldClaims_StaleWaiterPurged(t *testing.T) {
 		t.Errorf("unmet expectations: %v", err)
 	}
 }
+
+func TestReleaseClaim_PopWaiterScanError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	now := time.Now().UTC()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
+	// Fetch released claim.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, type, resource, agent_id, status, metadata,
+			        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			        claimed_at, expires_at, updated_at
+			 FROM claims WHERE id = $1`,
+	)).WithArgs("claim-2").WillReturnRows(
+		sqlmock.NewRows(claimColumns).AddRow(
+			"claim-2", "conch", "conch#scan-err", "agent1", "released", `{}`, "", "", "", "", false, false,
+			now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+		),
+	)
+	// PopNextWaiter scan: returns row with wrong column count causing scan error.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, resource, agent_id, type, metadata,
+		        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+		        expires_in_sec, queued_at
+		 FROM claim_queue WHERE resource = $1
+		 ORDER BY queued_at ASC LIMIT 1`,
+	)).WithArgs("conch#scan-err").WillReturnRows(
+		// Return a row with too few columns — causes scan error (non-ErrNoRows).
+		sqlmock.NewRows([]string{"id"}).AddRow("bad"),
+	)
+	mock.ExpectRollback()
+
+	// Should return error because PopNextWaiter failed.
+	_, err := s.ReleaseClaim(context.Background(), "claim-2")
+	if err == nil {
+		t.Fatal("expected error from PopNextWaiter scan failure, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
