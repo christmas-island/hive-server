@@ -172,6 +172,21 @@ func TestRunClaimExpiry_TickerPath_Success(t *testing.T) {
 	<-done
 }
 
+func TestLogVersionInfo(t *testing.T) {
+	// Set known values and verify logVersionInfo doesn't panic.
+	SetVersionInfo("1.0.0", "abc123", "2026-03-11")
+	logVersionInfo() // Should log without error.
+
+	// Verify the version info is still correct after logging.
+	vi := GetVersionInfo()
+	if vi.Version != "1.0.0" {
+		t.Errorf("Version = %q, want 1.0.0", vi.Version)
+	}
+	if vi.Commit != "abc123" {
+		t.Errorf("Commit = %q, want abc123", vi.Commit)
+	}
+}
+
 func TestRunClaimExpiry_TickerPath_ZeroExpired(t *testing.T) {
 	// n == 0 takes a different branch (no log.Info)
 	orig := claimExpiryInterval
