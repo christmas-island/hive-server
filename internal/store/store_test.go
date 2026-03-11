@@ -116,4 +116,3 @@ func TestSchemaTables(t *testing.T) {
 		}
 	}
 }
-
