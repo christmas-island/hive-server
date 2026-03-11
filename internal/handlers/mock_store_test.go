@@ -322,7 +322,7 @@ func (m *mockStore) DeleteTask(_ context.Context, id string) error {
 
 // --- Agents ---
 
-func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status model.AgentStatus, hiveLocalVersion, hivePluginVersion string) (*model.Agent, error) {
+func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []string, status model.AgentStatus, activity, hiveLocalVersion, hivePluginVersion string) (*model.Agent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.consumeErr("UpsertAgent"); err != nil {
@@ -340,6 +340,7 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 			ID:                id,
 			Name:              id,
 			Status:            status,
+			Activity:          activity,
 			Capabilities:      capabilities,
 			LastHeartbeat:     now,
 			RegisteredAt:      now,
@@ -351,6 +352,7 @@ func (m *mockStore) Heartbeat(_ context.Context, id string, capabilities []strin
 	}
 
 	existing.Status = status
+	existing.Activity = activity
 	existing.Capabilities = capabilities
 	existing.LastHeartbeat = now
 	existing.HiveLocalVersion = hiveLocalVersion
@@ -792,6 +794,7 @@ func copyAgent(a *model.Agent) *model.Agent {
 		ID:                a.ID,
 		Name:              a.Name,
 		Status:            a.Status,
+		Activity:          a.Activity,
 		Capabilities:      caps,
 		LastHeartbeat:     a.LastHeartbeat,
 		RegisteredAt:      a.RegisteredAt,
