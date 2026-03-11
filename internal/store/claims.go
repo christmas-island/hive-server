@@ -33,9 +33,13 @@ func (s *Store) CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, 
 
 	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO claims (id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			`INSERT INTO claims (id, type, resource, agent_id, status, metadata,
+			 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			 claimed_at, expires_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 			c.ID, string(c.Type), c.Resource, c.AgentID, string(c.Status), string(metaJSON),
+			c.SessionKey, c.SessionID, c.Channel,
+			c.SenderID, c.SenderIsOwner, c.Sandboxed,
 			now.Format(time.RFC3339Nano), c.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		)
 		return err
@@ -54,7 +58,7 @@ func (s *Store) CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, 
 // GetClaim retrieves a claim by ID.
 func (s *Store) GetClaim(ctx context.Context, id string) (*model.Claim, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
 		id,
 	)
@@ -63,7 +67,7 @@ func (s *Store) GetClaim(ctx context.Context, id string) (*model.Claim, error) {
 
 // ListClaims returns claims matching the filter.
 func (s *Store) ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.Claim, error) {
-	q := `SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+	q := `SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1`
 	args := []any{}
 	argIdx := 1
@@ -86,6 +90,11 @@ func (s *Store) ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.C
 	if f.Status != "" {
 		q += fmt.Sprintf(` AND status = $%d`, argIdx)
 		args = append(args, f.Status)
+		argIdx++
+	}
+	if f.SessionKey != "" {
+		q += fmt.Sprintf(` AND session_key = $%d`, argIdx)
+		args = append(args, f.SessionKey)
 		argIdx++
 	}
 	q += ` ORDER BY claimed_at DESC`

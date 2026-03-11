@@ -30,9 +30,11 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*mo
 		var existing model.MemoryEntry
 		var tagsRaw, createdStr, updatedStr string
 		err := tx.QueryRowContext(ctx,
-			`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+			`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 			entry.Key,
-		).Scan(&existing.Key, &existing.Value, &existing.AgentID, &tagsRaw, &existing.Version, &createdStr, &updatedStr)
+		).Scan(&existing.Key, &existing.Value, &existing.AgentID, &tagsRaw, &existing.Version,
+			&existing.SessionKey, &existing.SessionID, &existing.Channel, &existing.SenderID, &existing.SenderIsOwner, &existing.Sandboxed,
+			&createdStr, &updatedStr)
 
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -42,9 +44,13 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*mo
 				createdAt = entry.CreatedAt
 			}
 			_, err = tx.ExecContext(ctx,
-				`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, 1, $5, $6)`,
+				`INSERT INTO memory (key, value, agent_id, tags, version,
+				 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+				 created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9, $10, $11, $12)`,
 				entry.Key, entry.Value, entry.AgentID, string(tagsJSON),
+				entry.SessionKey, entry.SessionID, entry.Channel,
+				entry.SenderID, entry.SenderIsOwner, entry.Sandboxed,
 				createdAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 			)
 			if err != nil {
@@ -67,9 +73,13 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*mo
 				return model.ErrConflict
 			}
 			_, err = tx.ExecContext(ctx,
-				`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4
-                 WHERE key = $5`,
+				`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1,
+				 session_key = $4, session_id = $5, channel = $6, sender_id = $7,
+				 sender_is_owner = $8, sandboxed = $9, updated_at = $10
+                 WHERE key = $11`,
 				entry.Value, entry.AgentID, string(tagsJSON),
+				entry.SessionKey, entry.SessionID, entry.Channel,
+				entry.SenderID, entry.SenderIsOwner, entry.Sandboxed,
 				now.Format(time.RFC3339Nano), entry.Key,
 			)
 			if err != nil {
@@ -93,7 +103,7 @@ func (s *Store) UpsertMemory(ctx context.Context, entry *model.MemoryEntry) (*mo
 // GetMemory retrieves a single memory entry by key.
 func (s *Store) GetMemory(ctx context.Context, key string) (*model.MemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 		key,
 	)
 	return scanMemoryRow(row)
@@ -101,7 +111,7 @@ func (s *Store) GetMemory(ctx context.Context, key string) (*model.MemoryEntry, 
 
 // ListMemory returns memory entries matching the filter.
 func (s *Store) ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error) {
-	q := `SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1`
+	q := `SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1`
 	args := []any{}
 	argIdx := 1
 
@@ -119,6 +129,11 @@ func (s *Store) ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.
 	if f.Prefix != "" {
 		q += fmt.Sprintf(` AND key LIKE $%d`, argIdx)
 		args = append(args, f.Prefix+"%")
+		argIdx++
+	}
+	if f.SessionKey != "" {
+		q += fmt.Sprintf(` AND session_key = $%d`, argIdx)
+		args = append(args, f.SessionKey)
 		argIdx++
 	}
 	q += ` ORDER BY updated_at DESC`

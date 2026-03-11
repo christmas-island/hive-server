@@ -65,7 +65,9 @@ func scanMemoryRow(row *sql.Row) (*model.MemoryEntry, error) {
 	var e model.MemoryEntry
 	var tagsRaw string
 	var createdStr, updatedStr string
-	err := row.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version, &createdStr, &updatedStr)
+	err := row.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version,
+		&e.SessionKey, &e.SessionID, &e.Channel, &e.SenderID, &e.SenderIsOwner, &e.Sandboxed,
+		&createdStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.ErrNotFound
 	}
@@ -79,7 +81,9 @@ func scanMemoryRows(rows *sql.Rows) (*model.MemoryEntry, error) {
 	var e model.MemoryEntry
 	var tagsRaw string
 	var createdStr, updatedStr string
-	if err := rows.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version, &createdStr, &updatedStr); err != nil {
+	if err := rows.Scan(&e.Key, &e.Value, &e.AgentID, &tagsRaw, &e.Version,
+		&e.SessionKey, &e.SessionID, &e.Channel, &e.SenderID, &e.SenderIsOwner, &e.Sandboxed,
+		&createdStr, &updatedStr); err != nil {
 		return nil, fmt.Errorf("scan memory row: %w", err)
 	}
 	return finishMemoryScan(&e, tagsRaw, createdStr, updatedStr)
@@ -116,7 +120,9 @@ func scanTaskRow(row *sql.Row) (*model.Task, error) {
 	var t model.Task
 	var tagsRaw, createdStr, updatedStr string
 	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
-		&t.Priority, &tagsRaw, &createdStr, &updatedStr)
+		&t.Priority, &tagsRaw,
+		&t.SessionKey, &t.SessionID, &t.Channel, &t.SenderID, &t.SenderIsOwner, &t.Sandboxed,
+		&createdStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.ErrNotFound
 	}
@@ -130,7 +136,9 @@ func scanTaskRows(rows *sql.Rows) (*model.Task, error) {
 	var t model.Task
 	var tagsRaw, createdStr, updatedStr string
 	if err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
-		&t.Priority, &tagsRaw, &createdStr, &updatedStr); err != nil {
+		&t.Priority, &tagsRaw,
+		&t.SessionKey, &t.SessionID, &t.Channel, &t.SenderID, &t.SenderIsOwner, &t.Sandboxed,
+		&createdStr, &updatedStr); err != nil {
 		return nil, fmt.Errorf("scan task row: %w", err)
 	}
 	return finishTaskScan(&t, tagsRaw, createdStr, updatedStr)
@@ -161,8 +169,9 @@ func finishTaskScan(t *model.Task, tagsRaw, createdStr, updatedStr string) (*mod
 func scanClaimRow(row *sql.Row) (*model.Claim, error) {
 	var c model.Claim
 	var metaRaw, claimedStr, expiresStr, updatedStr string
-	err := row.Scan(&c.ID, &c.Type, &c.Resource, &c.AgentID, &c.Status,
-		&metaRaw, &claimedStr, &expiresStr, &updatedStr)
+	err := row.Scan(&c.ID, &c.Type, &c.Resource, &c.AgentID, &c.Status, &metaRaw,
+		&c.SessionKey, &c.SessionID, &c.Channel, &c.SenderID, &c.SenderIsOwner, &c.Sandboxed,
+		&claimedStr, &expiresStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.ErrNotFound
 	}
@@ -175,8 +184,9 @@ func scanClaimRow(row *sql.Row) (*model.Claim, error) {
 func scanClaimRows(rows *sql.Rows) (*model.Claim, error) {
 	var c model.Claim
 	var metaRaw, claimedStr, expiresStr, updatedStr string
-	if err := rows.Scan(&c.ID, &c.Type, &c.Resource, &c.AgentID, &c.Status,
-		&metaRaw, &claimedStr, &expiresStr, &updatedStr); err != nil {
+	if err := rows.Scan(&c.ID, &c.Type, &c.Resource, &c.AgentID, &c.Status, &metaRaw,
+		&c.SessionKey, &c.SessionID, &c.Channel, &c.SenderID, &c.SenderIsOwner, &c.Sandboxed,
+		&claimedStr, &expiresStr, &updatedStr); err != nil {
 		return nil, fmt.Errorf("scan claim row: %w", err)
 	}
 	return finishClaimScan(&c, metaRaw, claimedStr, expiresStr, updatedStr)

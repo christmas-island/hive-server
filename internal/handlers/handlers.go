@@ -97,8 +97,10 @@ func (a *API) routes() http.Handler {
 type ctxKey string
 
 const ctxKeyAgentID ctxKey = "agent_id"
+const ctxKeySession ctxKey = "session_context"
 
-// authMiddleware validates the Bearer token and extracts X-Agent-ID into context.
+// authMiddleware validates the Bearer token and extracts X-Agent-ID and session
+// context headers into context.
 func (a *API) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If no token configured, skip auth (local dev).
@@ -121,6 +123,24 @@ func (a *API) authMiddleware(next http.Handler) http.Handler {
 		if aid != "" {
 			ctx = context.WithValue(ctx, ctxKeyAgentID, aid)
 		}
+
+		// Extract session context headers.
+		sc := model.SessionContext{
+			SessionKey:    r.Header.Get("X-Session-Key"),
+			SessionID:     r.Header.Get("X-Session-ID"),
+			Channel:       r.Header.Get("X-Channel"),
+			SenderID:      r.Header.Get("X-Sender-ID"),
+			SenderIsOwner: r.Header.Get("X-Sender-Is-Owner") == "true",
+			Sandboxed:     r.Header.Get("X-Sandboxed") == "true",
+		}
+		ctx = context.WithValue(ctx, ctxKeySession, sc)
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// sessionFromCtx extracts the SessionContext from the request context.
+func sessionFromCtx(ctx context.Context) model.SessionContext {
+	sc, _ := ctx.Value(ctxKeySession).(model.SessionContext)
+	return sc
 }

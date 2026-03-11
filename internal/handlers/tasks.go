@@ -31,11 +31,12 @@ type taskGetInput struct {
 }
 
 type taskListInput struct {
-	Status   string `query:"status" doc:"Filter by task status"`
-	Assignee string `query:"assignee" doc:"Filter by assignee"`
-	Creator  string `query:"creator" doc:"Filter by creator"`
-	Limit    int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
-	Offset   int    `query:"offset" doc:"Pagination offset" minimum:"0"`
+	Status     string `query:"status" doc:"Filter by task status"`
+	Assignee   string `query:"assignee" doc:"Filter by assignee"`
+	Creator    string `query:"creator" doc:"Filter by creator"`
+	SessionKey string `query:"session_key" doc:"Filter by session key"`
+	Limit      int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
+	Offset     int    `query:"offset" doc:"Pagination offset" minimum:"0"`
 }
 
 type taskListOutput struct {
@@ -62,11 +63,12 @@ type taskDeleteOutput struct{}
 
 func (a *API) taskCreate(ctx context.Context, input *taskCreateInput) (*taskOutput, error) {
 	t := &model.Task{
-		Title:       input.Body.Title,
-		Description: input.Body.Description,
-		Priority:    input.Body.Priority,
-		Tags:        input.Body.Tags,
-		Creator:     input.XAgentID,
+		Title:          input.Body.Title,
+		Description:    input.Body.Description,
+		Priority:       input.Body.Priority,
+		Tags:           input.Body.Tags,
+		Creator:        input.XAgentID,
+		SessionContext: sessionFromCtx(ctx),
 	}
 	result, err := a.store.CreateTask(ctx, t)
 	if err != nil {
@@ -88,11 +90,12 @@ func (a *API) taskGet(ctx context.Context, input *taskGetInput) (*taskOutput, er
 
 func (a *API) taskList(ctx context.Context, input *taskListInput) (*taskListOutput, error) {
 	f := model.TaskFilter{
-		Status:   input.Status,
-		Assignee: input.Assignee,
-		Creator:  input.Creator,
-		Limit:    input.Limit,
-		Offset:   input.Offset,
+		Status:     input.Status,
+		Assignee:   input.Assignee,
+		Creator:    input.Creator,
+		SessionKey: input.SessionKey,
+		Limit:      input.Limit,
+		Offset:     input.Offset,
 	}
 	tasks, err := a.store.ListTasks(ctx, f)
 	if err != nil {
@@ -106,10 +109,11 @@ func (a *API) taskList(ctx context.Context, input *taskListInput) (*taskListOutp
 
 func (a *API) taskUpdate(ctx context.Context, input *taskUpdateInput) (*taskOutput, error) {
 	upd := model.TaskUpdate{
-		Status:   input.Body.Status,
-		Assignee: input.Body.Assignee,
-		Note:     input.Body.Note,
-		AgentID:  input.XAgentID,
+		Status:         input.Body.Status,
+		Assignee:       input.Body.Assignee,
+		Note:           input.Body.Note,
+		AgentID:        input.XAgentID,
+		SessionContext: sessionFromCtx(ctx),
 	}
 	result, err := a.store.UpdateTask(ctx, input.ID, upd)
 	if errors.Is(err, model.ErrNotFound) {

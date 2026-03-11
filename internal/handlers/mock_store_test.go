@@ -85,13 +85,14 @@ func (m *mockStore) UpsertMemory(_ context.Context, entry *model.MemoryEntry) (*
 	existing, exists := m.memory[entry.Key]
 	if !exists {
 		e := &model.MemoryEntry{
-			Key:       entry.Key,
-			Value:     entry.Value,
-			AgentID:   entry.AgentID,
-			Tags:      entry.Tags,
-			Version:   1,
-			CreatedAt: now,
-			UpdatedAt: now,
+			Key:            entry.Key,
+			Value:          entry.Value,
+			AgentID:        entry.AgentID,
+			Tags:           entry.Tags,
+			Version:        1,
+			SessionContext: entry.SessionContext,
+			CreatedAt:      now,
+			UpdatedAt:      now,
 		}
 		m.memory[entry.Key] = e
 		return copyMemoryEntry(e), nil
@@ -105,6 +106,7 @@ func (m *mockStore) UpsertMemory(_ context.Context, entry *model.MemoryEntry) (*
 	existing.Value = entry.Value
 	existing.AgentID = entry.AgentID
 	existing.Tags = entry.Tags
+	existing.SessionContext = entry.SessionContext
 	existing.Version++
 	existing.UpdatedAt = now
 	return copyMemoryEntry(existing), nil
@@ -140,6 +142,9 @@ func (m *mockStore) ListMemory(_ context.Context, f model.MemoryFilter) ([]*mode
 			continue
 		}
 		if f.Tag != "" && !sliceContains(e.Tags, f.Tag) {
+			continue
+		}
+		if f.SessionKey != "" && e.SessionKey != f.SessionKey {
 			continue
 		}
 		result = append(result, copyMemoryEntry(e))
@@ -180,17 +185,18 @@ func (m *mockStore) CreateTask(_ context.Context, t *model.Task) (*model.Task, e
 
 	now := time.Now().UTC()
 	task := &model.Task{
-		ID:          uuid.New().String(),
-		Title:       t.Title,
-		Description: t.Description,
-		Status:      model.TaskStatusOpen,
-		Creator:     t.Creator,
-		Assignee:    t.Assignee,
-		Priority:    t.Priority,
-		Tags:        t.Tags,
-		Notes:       []string{},
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:             uuid.New().String(),
+		Title:          t.Title,
+		Description:    t.Description,
+		Status:         model.TaskStatusOpen,
+		Creator:        t.Creator,
+		Assignee:       t.Assignee,
+		Priority:       t.Priority,
+		Tags:           t.Tags,
+		Notes:          []string{},
+		SessionContext: t.SessionContext,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	if task.Tags == nil {
 		task.Tags = []string{}
@@ -235,6 +241,9 @@ func (m *mockStore) ListTasks(_ context.Context, f model.TaskFilter) ([]*model.T
 		if f.Creator != "" && t.Creator != f.Creator {
 			continue
 		}
+		if f.SessionKey != "" && t.SessionKey != f.SessionKey {
+			continue
+		}
 		task := copyTask(t)
 		task.Notes = make([]string, len(m.notes[t.ID]))
 		copy(task.Notes, m.notes[t.ID])
@@ -275,6 +284,9 @@ func (m *mockStore) UpdateTask(_ context.Context, id string, upd model.TaskUpdat
 	if upd.Assignee != nil {
 		t.Assignee = *upd.Assignee
 	}
+
+	// Update session context.
+	t.SessionContext = upd.SessionContext
 
 	// Append note.
 	if upd.Note != nil && *upd.Note != "" {
@@ -582,15 +594,16 @@ func (m *mockStore) CreateClaim(_ context.Context, c *model.Claim) (*model.Claim
 
 	now := time.Now().UTC()
 	claim := &model.Claim{
-		ID:        uuid.New().String(),
-		Type:      c.Type,
-		Resource:  c.Resource,
-		AgentID:   c.AgentID,
-		Status:    model.ClaimStatusActive,
-		Metadata:  c.Metadata,
-		ClaimedAt: now,
-		ExpiresAt: c.ExpiresAt,
-		UpdatedAt: now,
+		ID:             uuid.New().String(),
+		Type:           c.Type,
+		Resource:       c.Resource,
+		AgentID:        c.AgentID,
+		Status:         model.ClaimStatusActive,
+		Metadata:       c.Metadata,
+		SessionContext: c.SessionContext,
+		ClaimedAt:      now,
+		ExpiresAt:      c.ExpiresAt,
+		UpdatedAt:      now,
 	}
 	if claim.Metadata == nil {
 		claim.Metadata = map[string]string{}
@@ -632,6 +645,9 @@ func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model
 			continue
 		}
 		if f.Status != "" && string(c.Status) != f.Status {
+			continue
+		}
+		if f.SessionKey != "" && c.SessionKey != f.SessionKey {
 			continue
 		}
 		result = append(result, copyClaim(c))
@@ -704,13 +720,14 @@ func copyMemoryEntry(e *model.MemoryEntry) *model.MemoryEntry {
 	tags := make([]string, len(e.Tags))
 	copy(tags, e.Tags)
 	return &model.MemoryEntry{
-		Key:       e.Key,
-		Value:     e.Value,
-		AgentID:   e.AgentID,
-		Tags:      tags,
-		Version:   e.Version,
-		CreatedAt: e.CreatedAt,
-		UpdatedAt: e.UpdatedAt,
+		Key:            e.Key,
+		Value:          e.Value,
+		AgentID:        e.AgentID,
+		Tags:           tags,
+		Version:        e.Version,
+		SessionContext: e.SessionContext,
+		CreatedAt:      e.CreatedAt,
+		UpdatedAt:      e.UpdatedAt,
 	}
 }
 
@@ -720,17 +737,18 @@ func copyTask(t *model.Task) *model.Task {
 	notes := make([]string, len(t.Notes))
 	copy(notes, t.Notes)
 	return &model.Task{
-		ID:          t.ID,
-		Title:       t.Title,
-		Description: t.Description,
-		Status:      t.Status,
-		Creator:     t.Creator,
-		Assignee:    t.Assignee,
-		Priority:    t.Priority,
-		Tags:        tags,
-		Notes:       notes,
-		CreatedAt:   t.CreatedAt,
-		UpdatedAt:   t.UpdatedAt,
+		ID:             t.ID,
+		Title:          t.Title,
+		Description:    t.Description,
+		Status:         t.Status,
+		Creator:        t.Creator,
+		Assignee:       t.Assignee,
+		Priority:       t.Priority,
+		Tags:           tags,
+		Notes:          notes,
+		SessionContext: t.SessionContext,
+		CreatedAt:      t.CreatedAt,
+		UpdatedAt:      t.UpdatedAt,
 	}
 }
 
@@ -753,15 +771,16 @@ func copyClaim(c *model.Claim) *model.Claim {
 		meta[k] = v
 	}
 	return &model.Claim{
-		ID:        c.ID,
-		Type:      c.Type,
-		Resource:  c.Resource,
-		AgentID:   c.AgentID,
-		Status:    c.Status,
-		Metadata:  meta,
-		ClaimedAt: c.ClaimedAt,
-		ExpiresAt: c.ExpiresAt,
-		UpdatedAt: c.UpdatedAt,
+		ID:             c.ID,
+		Type:           c.Type,
+		Resource:       c.Resource,
+		AgentID:        c.AgentID,
+		Status:         c.Status,
+		Metadata:       meta,
+		SessionContext: c.SessionContext,
+		ClaimedAt:      c.ClaimedAt,
+		ExpiresAt:      c.ExpiresAt,
+		UpdatedAt:      c.UpdatedAt,
 	}
 }
 

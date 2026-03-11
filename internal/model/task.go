@@ -46,32 +46,35 @@ func IsValidTransition(src, dst TaskStatus) bool {
 
 // Task is the full task record including appended notes.
 type Task struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Status      TaskStatus `json:"status"`
-	Creator     string     `json:"creator"`
-	Assignee    string     `json:"assignee"`
-	Priority    int        `json:"priority"`
-	Tags        []string   `json:"tags"`
-	Notes       []string   `json:"notes"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID             string     `json:"id"`
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	Status         TaskStatus `json:"status"`
+	Creator        string     `json:"creator"`
+	Assignee       string     `json:"assignee"`
+	Priority       int        `json:"priority"`
+	Tags           []string   `json:"tags"`
+	Notes          []string   `json:"notes"`
+	SessionContext `json:",inline"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // TaskFilter holds optional filter parameters for listing tasks.
 type TaskFilter struct {
-	Status   string
-	Assignee string
-	Creator  string
-	Limit    int
-	Offset   int
+	Status     string
+	Assignee   string
+	Creator    string
+	SessionKey string
+	Limit      int
+	Offset     int
 }
 
 // TaskUpdate carries the fields that can be changed via PATCH.
 type TaskUpdate struct {
-	Status   *TaskStatus
-	Assignee *string
-	Note     *string // appended if non-nil
-	AgentID  string  // who is making the change (for note attribution)
+	Status         *TaskStatus
+	Assignee       *string
+	Note           *string // appended if non-nil
+	AgentID        string  // who is making the change (for note attribution)
+	SessionContext         // session context of the caller
 }
