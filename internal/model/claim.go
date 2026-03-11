@@ -22,23 +22,25 @@ const (
 
 // Claim represents an agent's exclusive hold on a resource.
 type Claim struct {
-	ID        string            `json:"id"`
-	Type      ClaimType         `json:"type"`
-	Resource  string            `json:"resource"`
-	AgentID   string            `json:"agent_id"`
-	Status    ClaimStatus       `json:"status"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
-	ClaimedAt time.Time         `json:"claimed_at"`
-	ExpiresAt time.Time         `json:"expires_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
+	ID             string            `json:"id"`
+	Type           ClaimType         `json:"type"`
+	Resource       string            `json:"resource"`
+	AgentID        string            `json:"agent_id"`
+	Status         ClaimStatus       `json:"status"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	SessionContext `json:",inline"`
+	ClaimedAt      time.Time `json:"claimed_at"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // ClaimFilter holds optional filters for listing claims.
 type ClaimFilter struct {
-	Type     string
-	AgentID  string
-	Resource string
-	Status   string
-	Limit    int
-	Offset   int
+	Type       string
+	AgentID    string
+	Resource   string
+	Status     string
+	SessionKey string
+	Limit      int
+	Offset     int
 }

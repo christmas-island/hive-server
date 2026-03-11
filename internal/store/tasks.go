@@ -33,10 +33,14 @@ func (s *Store) CreateTask(ctx context.Context, t *model.Task) (*model.Task, err
 
 	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags,
+			 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			 created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 			t.ID, t.Title, t.Description, string(t.Status), t.Creator,
 			t.Assignee, t.Priority, string(tagsJSON),
+			t.SessionKey, t.SessionID, t.Channel,
+			t.SenderID, t.SenderIsOwner, t.Sandboxed,
 			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		)
 		return err
@@ -52,7 +56,7 @@ func (s *Store) CreateTask(ctx context.Context, t *model.Task) (*model.Task, err
 // GetTask retrieves a task by ID, including its notes.
 func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 		id,
 	)
@@ -68,7 +72,7 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 
 // ListTasks returns tasks matching the filter.
 func (s *Store) ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Task, error) {
-	q := `SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+	q := `SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1`
 	args := []any{}
 	argIdx := 1
@@ -86,6 +90,11 @@ func (s *Store) ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Tas
 	if f.Creator != "" {
 		q += fmt.Sprintf(` AND creator = $%d`, argIdx)
 		args = append(args, f.Creator)
+		argIdx++
+	}
+	if f.SessionKey != "" {
+		q += fmt.Sprintf(` AND session_key = $%d`, argIdx)
+		args = append(args, f.SessionKey)
 		argIdx++
 	}
 	q += ` ORDER BY created_at DESC`
@@ -134,10 +143,12 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd model.TaskUpdate)
 		var t model.Task
 		var tagsRaw, createdStr, updatedStr string
 		err := tx.QueryRowContext(ctx,
-			`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+			`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`, id,
 		).Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Creator, &t.Assignee,
-			&t.Priority, &tagsRaw, &createdStr, &updatedStr)
+			&t.Priority, &tagsRaw,
+			&t.SessionKey, &t.SessionID, &t.Channel, &t.SenderID, &t.SenderIsOwner, &t.Sandboxed,
+			&createdStr, &updatedStr)
 		if errors.Is(err, sql.ErrNoRows) {
 			return model.ErrNotFound
 		}
@@ -161,8 +172,13 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd model.TaskUpdate)
 		}
 
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
-			string(t.Status), t.Assignee, now.Format(time.RFC3339Nano), id,
+			`UPDATE tasks SET status = $1, assignee = $2,
+			 session_key = $3, session_id = $4, channel = $5, sender_id = $6,
+			 sender_is_owner = $7, sandboxed = $8, updated_at = $9 WHERE id = $10`,
+			string(t.Status), t.Assignee,
+			upd.SessionKey, upd.SessionID, upd.Channel,
+			upd.SenderID, upd.SenderIsOwner, upd.Sandboxed,
+			now.Format(time.RFC3339Nano), id,
 		); err != nil {
 			return fmt.Errorf("update task: %w", err)
 		}

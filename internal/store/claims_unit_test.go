@@ -13,13 +13,14 @@ import (
 )
 
 // claimColumns lists the columns returned by claim queries.
-var claimColumns = []string{"id", "type", "resource", "agent_id", "status", "metadata", "claimed_at", "expires_at", "updated_at"}
+var claimColumns = []string{"id", "type", "resource", "agent_id", "status", "metadata", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "claimed_at", "expires_at", "updated_at"}
 
 // claimRow builds a sample claim row.
 func claimRow(now time.Time) *sqlmock.Rows {
 	return sqlmock.NewRows(claimColumns).AddRow(
 		"claim-1", "conch", "resource-a", "agent1", "active",
 		`{"key":"val"}`,
+		"", "", "", "", false, false,
 		now.Format(time.RFC3339Nano),
 		now.Add(time.Hour).Format(time.RFC3339Nano),
 		now.Format(time.RFC3339Nano),
@@ -35,7 +36,7 @@ func TestGetClaim_Success(t *testing.T) {
 	now := time.Now().UTC()
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
 	)).WithArgs("claim-1").WillReturnRows(claimRow(now))
 
@@ -65,7 +66,7 @@ func TestGetClaim_NotFound(t *testing.T) {
 	s := &Store{db: db}
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
 	)).WithArgs("missing").WillReturnRows(sqlmock.NewRows(claimColumns))
 
@@ -81,7 +82,7 @@ func TestGetClaim_QueryError(t *testing.T) {
 
 	dbErr := errors.New("db error")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
 	)).WithArgs("claim-1").WillReturnError(dbErr)
 
@@ -99,11 +100,11 @@ func TestListClaims_NoFilter(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(claimColumns).
-		AddRow("c1", "conch", "r1", "a1", "active", `{}`, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
-		AddRow("c2", "issue", "r2", "a2", "expired", `{}`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("c1", "conch", "r1", "a1", "active", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
+		AddRow("c2", "issue", "r2", "a2", "expired", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
@@ -122,10 +123,10 @@ func TestListClaims_WithType(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(claimColumns).
-		AddRow("c1", "conch", "r1", "a1", "active", `{}`, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("c1", "conch", "r1", "a1", "active", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 AND type = $1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WithArgs("conch").WillReturnRows(rows)
 
@@ -145,7 +146,7 @@ func TestListClaims_WithAgentID(t *testing.T) {
 	rows := sqlmock.NewRows(claimColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 AND agent_id = $1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
@@ -164,10 +165,10 @@ func TestListClaims_WithResource(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(claimColumns).
-		AddRow("c1", "conch", "special-resource", "a1", "active", `{}`, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("c1", "conch", "special-resource", "a1", "active", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 AND resource = $1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WithArgs("special-resource").WillReturnRows(rows)
 
@@ -187,7 +188,7 @@ func TestListClaims_WithStatus(t *testing.T) {
 	rows := sqlmock.NewRows(claimColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 AND status = $1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WithArgs("expired").WillReturnRows(rows)
 
@@ -204,7 +205,7 @@ func TestListClaims_WithLimitAndOffset(t *testing.T) {
 	rows := sqlmock.NewRows(claimColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 ORDER BY claimed_at DESC LIMIT 5 OFFSET 10`,
 	)).WillReturnRows(rows)
 
@@ -220,10 +221,10 @@ func TestListClaims_AllFilters(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(claimColumns).
-		AddRow("c1", "conch", "r1", "agent1", "active", `{}`, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("c1", "conch", "r1", "agent1", "active", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 AND type = $1 AND agent_id = $2 AND resource = $3 AND status = $4 ORDER BY claimed_at DESC LIMIT 25 OFFSET 5`,
 	)).WithArgs("conch", "agent1", "r1", "active").WillReturnRows(rows)
 
@@ -245,7 +246,7 @@ func TestListClaims_QueryError(t *testing.T) {
 
 	dbErr := errors.New("query failed")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WillReturnError(dbErr)
 
@@ -263,7 +264,7 @@ func TestListClaims_ScanError(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"id"}).AddRow("c1")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1 ORDER BY claimed_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
@@ -281,7 +282,7 @@ func TestCreateClaim_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO claims (id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at)`,
+		`INSERT INTO claims (id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -316,7 +317,7 @@ func TestCreateClaim_NilMetadata(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO claims (id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at)`,
+		`INSERT INTO claims (id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -343,7 +344,7 @@ func TestCreateClaim_ExecError(t *testing.T) {
 	dbErr := errors.New("exec failed")
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO claims (id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at)`,
+		`INSERT INTO claims (id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at)`,
 	)).WillReturnError(dbErr)
 	mock.ExpectRollback()
 
@@ -373,12 +374,11 @@ func TestReleaseClaim_Success(t *testing.T) {
 
 	// GetClaim after release
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
 	)).WithArgs("claim-1").WillReturnRows(
 		sqlmock.NewRows(claimColumns).AddRow(
-			"claim-1", "conch", "r1", "a1", "released", `{}`,
-			now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"claim-1", "conch", "r1", "a1", "released", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 
@@ -443,12 +443,11 @@ func TestRenewClaim_Success(t *testing.T) {
 	mock.ExpectCommit()
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, claimed_at, expires_at, updated_at
+		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
 	)).WithArgs("claim-1").WillReturnRows(
 		sqlmock.NewRows(claimColumns).AddRow(
-			"claim-1", "conch", "r1", "a1", "active", `{}`,
-			now.Format(time.RFC3339Nano), newExpiry.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"claim-1", "conch", "r1", "a1", "active", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), newExpiry.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 

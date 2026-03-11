@@ -32,12 +32,13 @@ type claimGetInput struct {
 }
 
 type claimListInput struct {
-	Type     string `query:"type" doc:"Filter by claim type"`
-	AgentID  string `query:"agent_id" doc:"Filter by agent ID"`
-	Resource string `query:"resource" doc:"Filter by resource"`
-	Status   string `query:"status" doc:"Filter by status (active, expired, released)"`
-	Limit    int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
-	Offset   int    `query:"offset" doc:"Pagination offset" minimum:"0"`
+	Type       string `query:"type" doc:"Filter by claim type"`
+	AgentID    string `query:"agent_id" doc:"Filter by agent ID"`
+	Resource   string `query:"resource" doc:"Filter by resource"`
+	Status     string `query:"status" doc:"Filter by status (active, expired, released)"`
+	SessionKey string `query:"session_key" doc:"Filter by session key"`
+	Limit      int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
+	Offset     int    `query:"offset" doc:"Pagination offset" minimum:"0"`
 }
 
 type claimListOutput struct {
@@ -74,11 +75,12 @@ func (a *API) claimCreate(ctx context.Context, input *claimCreateInput) (*claimO
 	}
 
 	c := &model.Claim{
-		Type:      input.Body.Type,
-		Resource:  input.Body.Resource,
-		AgentID:   input.XAgentID,
-		Metadata:  input.Body.Metadata,
-		ExpiresAt: time.Now().UTC().Add(dur),
+		Type:           input.Body.Type,
+		Resource:       input.Body.Resource,
+		AgentID:        input.XAgentID,
+		Metadata:       input.Body.Metadata,
+		SessionContext: sessionFromCtx(ctx),
+		ExpiresAt:      time.Now().UTC().Add(dur),
 	}
 	result, err := a.store.CreateClaim(ctx, c)
 	if errors.Is(err, model.ErrConflict) {
@@ -103,12 +105,13 @@ func (a *API) claimGet(ctx context.Context, input *claimGetInput) (*claimOutput,
 
 func (a *API) claimList(ctx context.Context, input *claimListInput) (*claimListOutput, error) {
 	f := model.ClaimFilter{
-		Type:     input.Type,
-		AgentID:  input.AgentID,
-		Resource: input.Resource,
-		Status:   input.Status,
-		Limit:    input.Limit,
-		Offset:   input.Offset,
+		Type:       input.Type,
+		AgentID:    input.AgentID,
+		Resource:   input.Resource,
+		Status:     input.Status,
+		SessionKey: input.SessionKey,
+		Limit:      input.Limit,
+		Offset:     input.Offset,
 	}
 	claims, err := a.store.ListClaims(ctx, f)
 	if err != nil {

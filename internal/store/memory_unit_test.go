@@ -19,11 +19,11 @@ func TestGetMemory_Success(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-		AddRow("mykey", "myvalue", "agent1", `["tag1"]`, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+		AddRow("mykey", "myvalue", "agent1", `["tag1"]`, 1, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("mykey").WillReturnRows(rows)
 
 	got, err := s.GetMemory(context.Background(), "mykey")
@@ -51,10 +51,10 @@ func TestGetMemory_NotFound(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"})
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"})
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("missing").WillReturnRows(rows)
 
 	_, err := s.GetMemory(context.Background(), "missing")
@@ -69,7 +69,7 @@ func TestGetMemory_QueryError(t *testing.T) {
 
 	dbErr := errors.New("db error")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("key1").WillReturnError(dbErr)
 
 	_, err := s.GetMemory(context.Background(), "key1")
@@ -85,12 +85,12 @@ func TestListMemory_NoFilters(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-		AddRow("k1", "v1", "a1", `[]`, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
-		AddRow("k2", "v2", "a2", `["t1"]`, 2, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+		AddRow("k1", "v1", "a1", `[]`, 1, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
+		AddRow("k2", "v2", "a2", `["t1"]`, 2, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
 	got, err := s.ListMemory(context.Background(), model.MemoryFilter{})
@@ -107,11 +107,11 @@ func TestListMemory_WithTag(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-		AddRow("k1", "v1", "a1", `["bug"]`, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+		AddRow("k1", "v1", "a1", `["bug"]`, 1, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 AND tags @> jsonb_build_array($1::text) ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 AND tags @> jsonb_build_array($1::text) ORDER BY updated_at DESC LIMIT 50`,
 	)).WithArgs("bug").WillReturnRows(rows)
 
 	got, err := s.ListMemory(context.Background(), model.MemoryFilter{Tag: "bug"})
@@ -128,11 +128,11 @@ func TestListMemory_WithAgent(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-		AddRow("k1", "v1", "agent1", `[]`, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+		AddRow("k1", "v1", "agent1", `[]`, 1, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 AND agent_id = $1 ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 AND agent_id = $1 ORDER BY updated_at DESC LIMIT 50`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
 	got, err := s.ListMemory(context.Background(), model.MemoryFilter{Agent: "agent1"})
@@ -149,11 +149,11 @@ func TestListMemory_WithPrefix(t *testing.T) {
 	s := &Store{db: db}
 
 	now := time.Now().UTC()
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-		AddRow("prefix:key1", "v1", "a1", `[]`, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+		AddRow("prefix:key1", "v1", "a1", `[]`, 1, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 AND key LIKE $1 ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 AND key LIKE $1 ORDER BY updated_at DESC LIMIT 50`,
 	)).WithArgs("prefix:%").WillReturnRows(rows)
 
 	got, err := s.ListMemory(context.Background(), model.MemoryFilter{Prefix: "prefix:"})
@@ -169,10 +169,10 @@ func TestListMemory_WithLimit(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"})
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"})
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 10`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 10`,
 	)).WillReturnRows(rows)
 
 	_, err := s.ListMemory(context.Background(), model.MemoryFilter{Limit: 10})
@@ -185,10 +185,10 @@ func TestListMemory_WithOffset(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"})
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"})
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50 OFFSET 20`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50 OFFSET 20`,
 	)).WillReturnRows(rows)
 
 	_, err := s.ListMemory(context.Background(), model.MemoryFilter{Offset: 20})
@@ -203,7 +203,7 @@ func TestListMemory_QueryError(t *testing.T) {
 
 	dbErr := errors.New("query failed")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
 	)).WillReturnError(dbErr)
 
 	_, err := s.ListMemory(context.Background(), model.MemoryFilter{})
@@ -220,7 +220,7 @@ func TestListMemory_ScanError(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"key"}).AddRow("k1")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
 	_, err := s.ListMemory(context.Background(), model.MemoryFilter{})
@@ -233,10 +233,10 @@ func TestListMemory_Empty(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
-	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"})
+	rows := sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"})
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE 1=1 ORDER BY updated_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
 	got, err := s.ListMemory(context.Background(), model.MemoryFilter{})
@@ -313,13 +313,13 @@ func TestUpsertMemory_Insert(t *testing.T) {
 	mock.ExpectBegin()
 	// Check for existing: returns no rows
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("newkey").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}),
 	)
 	// Insert
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)`,
+		`INSERT INTO memory (key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -356,14 +356,14 @@ func TestUpsertMemory_Update(t *testing.T) {
 	mock.ExpectBegin()
 	// Check for existing: returns a row
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("existingkey").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-			AddRow("existingkey", "oldval", "agent1", `[]`, 3, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+			AddRow("existingkey", "oldval", "agent1", `[]`, 3, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)),
 	)
 	// Update
 	mock.ExpectExec(regexp.QuoteMeta(
-		`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4`,
+		`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, session_key = $4, session_id = $5, channel = $6, sender_id = $7, sender_is_owner = $8, sandboxed = $9, updated_at = $10`,
 	)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
@@ -395,10 +395,10 @@ func TestUpsertMemory_OptimisticConflict(t *testing.T) {
 	mock.ExpectBegin()
 	// Existing entry has version 5
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("key1").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-			AddRow("key1", "v", "a", `[]`, 5, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+			AddRow("key1", "v", "a", `[]`, 5, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)),
 	)
 	mock.ExpectRollback()
 
@@ -422,7 +422,7 @@ func TestUpsertMemory_QueryError(t *testing.T) {
 	dbErr := errors.New("query error")
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("key1").WillReturnError(dbErr)
 	mock.ExpectRollback()
 
@@ -443,12 +443,12 @@ func TestUpsertMemory_InsertError(t *testing.T) {
 	insertErr := errors.New("insert failed")
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("newkey").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)`,
+		`INSERT INTO memory (key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnError(insertErr)
 	mock.ExpectRollback()
 
@@ -468,13 +468,13 @@ func TestUpsertMemory_UpdateError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("key1").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}).
-			AddRow("key1", "oldval", "a1", `[]`, 1, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}).
+			AddRow("key1", "oldval", "a1", `[]`, 1, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, updated_at = $4`,
+		`UPDATE memory SET value = $1, agent_id = $2, tags = $3, version = version + 1, session_key = $4, session_id = $5, channel = $6, sender_id = $7, sender_is_owner = $8, sandboxed = $9, updated_at = $10`,
 	)).WillReturnError(updateErr)
 	mock.ExpectRollback()
 
@@ -491,12 +491,12 @@ func TestUpsertMemory_NilTags(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("newkey").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)`,
+		`INSERT INTO memory (key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -518,12 +518,12 @@ func TestUpsertMemory_WithCreatedAt(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT key, value, agent_id, tags, version, created_at, updated_at FROM memory WHERE key = $1`,
+		`SELECT key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at FROM memory WHERE key = $1`,
 	)).WithArgs("newkey").WillReturnRows(
-		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "created_at", "updated_at"}),
+		sqlmock.NewRows([]string{"key", "value", "agent_id", "tags", "version", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO memory (key, value, agent_id, tags, version, created_at, updated_at)`,
+		`INSERT INTO memory (key, value, agent_id, tags, version, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 

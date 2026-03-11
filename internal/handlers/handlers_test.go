@@ -74,6 +74,36 @@ func request(t *testing.T, srv *httptest.Server, method, path string, body any, 
 	return resp
 }
 
+// requestWithHeaders is like request but also sets extra headers (e.g. session context).
+func requestWithHeaders(t *testing.T, srv *httptest.Server, method, path string, body any, token, agentID string, headers map[string]string) *http.Response {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("encode body: %v", err)
+		}
+	}
+	req, err := http.NewRequestWithContext(context.Background(), method, srv.URL+path, &buf)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if agentID != "" {
+		req.Header.Set("X-Agent-ID", agentID)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	return resp
+}
+
 func decodeJSON(t *testing.T, resp *http.Response, v any) {
 	t.Helper()
 	defer resp.Body.Close()

@@ -147,4 +147,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_claims_active_resource
     ON claims (resource) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_claims_agent ON claims(agent_id);
 CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
+
+-- Session context columns for memory, tasks, and claims.
+ALTER TABLE memory ADD COLUMN IF NOT EXISTS session_key     TEXT    NOT NULL DEFAULT '';
+ALTER TABLE memory ADD COLUMN IF NOT EXISTS session_id      TEXT    NOT NULL DEFAULT '';
+ALTER TABLE memory ADD COLUMN IF NOT EXISTS channel         TEXT    NOT NULL DEFAULT '';
+ALTER TABLE memory ADD COLUMN IF NOT EXISTS sender_id       TEXT    NOT NULL DEFAULT '';
+ALTER TABLE memory ADD COLUMN IF NOT EXISTS sender_is_owner BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE memory ADD COLUMN IF NOT EXISTS sandboxed       BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS session_key     TEXT    NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS session_id      TEXT    NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel         TEXT    NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sender_id       TEXT    NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sender_is_owner BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sandboxed       BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS session_key     TEXT    NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS session_id      TEXT    NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS channel         TEXT    NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS sender_id       TEXT    NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS sender_is_owner BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS sandboxed       BOOLEAN NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_memory_session ON memory(session_key);
+CREATE INDEX IF NOT EXISTS idx_tasks_session  ON tasks(session_key);
+CREATE INDEX IF NOT EXISTS idx_claims_session ON claims(session_key);
 `

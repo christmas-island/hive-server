@@ -13,13 +13,14 @@ import (
 )
 
 // taskColumns lists columns for task queries.
-var taskColumns = []string{"id", "title", "description", "status", "creator", "assignee", "priority", "tags", "created_at", "updated_at"}
+var taskColumns = []string{"id", "title", "description", "status", "creator", "assignee", "priority", "tags", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "created_at", "updated_at"}
 
 // sampleTaskRow builds a sample task row.
 func sampleTaskRow(now time.Time) *sqlmock.Rows {
 	return sqlmock.NewRows(taskColumns).AddRow(
 		"task-1", "Test Task", "Description", "open", "creator1", "", 0,
 		`["tag1"]`,
+		"", "", "", "", false, false,
 		now.Format(time.RFC3339Nano),
 		now.Format(time.RFC3339Nano),
 	)
@@ -45,7 +46,7 @@ func TestGetTask_Success(t *testing.T) {
 	now := time.Now().UTC()
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(sampleTaskRow(now))
 
@@ -80,7 +81,7 @@ func TestGetTask_NotFound(t *testing.T) {
 	s := &Store{db: db}
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("missing").WillReturnRows(sqlmock.NewRows(taskColumns))
 
@@ -96,7 +97,7 @@ func TestGetTask_QueryError(t *testing.T) {
 
 	dbErr := errors.New("db error")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnError(dbErr)
 
@@ -114,7 +115,7 @@ func TestGetTask_LoadNotesError(t *testing.T) {
 	notesErr := errors.New("notes error")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(sampleTaskRow(now))
 
@@ -138,7 +139,7 @@ func TestGetTask_NoNotes(t *testing.T) {
 	now := time.Now().UTC()
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(sampleTaskRow(now))
 
@@ -161,11 +162,11 @@ func TestListTasks_NoFilter(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(taskColumns).
-		AddRow("t1", "Task 1", "Desc", "open", "c1", "", 0, `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
-		AddRow("t2", "Task 2", "Desc", "done", "c2", "a2", 1, `["bug"]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("t1", "Task 1", "Desc", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)).
+		AddRow("t2", "Task 2", "Desc", "done", "c2", "a2", 1, `["bug"]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 ORDER BY created_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
@@ -187,10 +188,10 @@ func TestListTasks_WithStatus(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(taskColumns).
-		AddRow("t1", "Task 1", "", "open", "c1", "", 0, `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("t1", "Task 1", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 AND status = $1 ORDER BY created_at DESC LIMIT 50`,
 	)).WithArgs("open").WillReturnRows(rows)
 
@@ -212,7 +213,7 @@ func TestListTasks_WithAssignee(t *testing.T) {
 	rows := sqlmock.NewRows(taskColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 AND assignee = $1 ORDER BY created_at DESC LIMIT 50`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
@@ -229,7 +230,7 @@ func TestListTasks_WithCreator(t *testing.T) {
 	rows := sqlmock.NewRows(taskColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 AND creator = $1 ORDER BY created_at DESC LIMIT 50`,
 	)).WithArgs("creator1").WillReturnRows(rows)
 
@@ -246,7 +247,7 @@ func TestListTasks_WithLimitAndOffset(t *testing.T) {
 	rows := sqlmock.NewRows(taskColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 ORDER BY created_at DESC LIMIT 10 OFFSET 5`,
 	)).WillReturnRows(rows)
 
@@ -262,7 +263,7 @@ func TestListTasks_QueryError(t *testing.T) {
 
 	dbErr := errors.New("query error")
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 ORDER BY created_at DESC LIMIT 50`,
 	)).WillReturnError(dbErr)
 
@@ -279,7 +280,7 @@ func TestListTasks_ScanError(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"id"}).AddRow("t1")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 ORDER BY created_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
@@ -295,10 +296,10 @@ func TestListTasks_LoadNotesError(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows(taskColumns).
-		AddRow("t1", "Task 1", "", "open", "c1", "", 0, `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		AddRow("t1", "Task 1", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 ORDER BY created_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
@@ -320,7 +321,7 @@ func TestListTasks_Empty(t *testing.T) {
 	rows := sqlmock.NewRows(taskColumns)
 
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1 ORDER BY created_at DESC LIMIT 50`,
 	)).WillReturnRows(rows)
 
@@ -341,7 +342,7 @@ func TestCreateTask_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)`,
+		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -378,7 +379,7 @@ func TestCreateTask_NilTags(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)`,
+		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -399,7 +400,7 @@ func TestCreateTask_ExecError(t *testing.T) {
 	dbErr := errors.New("insert failed")
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(
-		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, created_at, updated_at)`,
+		`INSERT INTO tasks (id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at)`,
 	)).WillReturnError(dbErr)
 	mock.ExpectRollback()
 
@@ -423,27 +424,25 @@ func TestUpdateTask_Success_StatusTransition(t *testing.T) {
 	// Fetch current task within RetryTx
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "open", "c1", "", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
+		`UPDATE tasks SET status = $1, assignee = $2, session_key = $3, session_id = $4, channel = $5, sender_id = $6, sender_is_owner = $7, sandboxed = $8, updated_at = $9 WHERE id = $10`,
 	)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	// GetTask after update
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "claimed", "c1", "agent1", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "claimed", "c1", "agent1", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	expectLoadTaskNotes(mock, "task-1")
@@ -470,7 +469,7 @@ func TestUpdateTask_NotFound(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`,
 	)).WithArgs("missing").WillReturnRows(sqlmock.NewRows(taskColumns))
 	mock.ExpectRollback()
@@ -491,12 +490,11 @@ func TestUpdateTask_InvalidTransition(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "done", "c1", "", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "done", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	mock.ExpectRollback()
@@ -516,16 +514,15 @@ func TestUpdateTask_WithNote(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "open", "c1", "", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
+		`UPDATE tasks SET status = $1, assignee = $2, session_key = $3, session_id = $4, channel = $5, sender_id = $6, sender_is_owner = $7, sandboxed = $8, updated_at = $9 WHERE id = $10`,
 	)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(
 		`INSERT INTO task_notes (task_id, note, agent_id, created_at) VALUES ($1, $2, $3, $4)`,
@@ -534,12 +531,11 @@ func TestUpdateTask_WithNote(t *testing.T) {
 
 	// GetTask
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "open", "c1", "", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	expectLoadTaskNotes(mock, "task-1", "added a note")
@@ -561,7 +557,7 @@ func TestUpdateTask_FetchError(t *testing.T) {
 	dbErr := errors.New("db error")
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnError(dbErr)
 	mock.ExpectRollback()
@@ -658,27 +654,25 @@ func TestUpdateTask_SameStatus(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
              FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "open", "c1", "", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	mock.ExpectExec(regexp.QuoteMeta(
-		`UPDATE tasks SET status = $1, assignee = $2, updated_at = $3 WHERE id = $4`,
+		`UPDATE tasks SET status = $1, assignee = $2, session_key = $3, session_id = $4, channel = $5, sender_id = $6, sender_is_owner = $7, sandboxed = $8, updated_at = $9 WHERE id = $10`,
 	)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	// GetTask
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, title, description, status, creator, assignee, priority, tags, created_at, updated_at
+		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
 	)).WithArgs("task-1").WillReturnRows(
 		sqlmock.NewRows(taskColumns).AddRow(
-			"task-1", "Task", "", "open", "c1", "", 0, `[]`,
-			now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+			"task-1", "Task", "", "open", "c1", "", 0, `[]`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
 	expectLoadTaskNotes(mock, "task-1")

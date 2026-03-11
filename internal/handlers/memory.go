@@ -31,11 +31,12 @@ type memoryGetInput struct {
 }
 
 type memoryListInput struct {
-	Tag    string `query:"tag" doc:"Filter by tag"`
-	Agent  string `query:"agent" doc:"Filter by agent ID"`
-	Prefix string `query:"prefix" doc:"Filter by key prefix"`
-	Limit  int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
-	Offset int    `query:"offset" doc:"Pagination offset" minimum:"0"`
+	Tag        string `query:"tag" doc:"Filter by tag"`
+	Agent      string `query:"agent" doc:"Filter by agent ID"`
+	Prefix     string `query:"prefix" doc:"Filter by key prefix"`
+	SessionKey string `query:"session_key" doc:"Filter by session key"`
+	Limit      int    `query:"limit" doc:"Maximum results (default 50)" minimum:"0"`
+	Offset     int    `query:"offset" doc:"Pagination offset" minimum:"0"`
 }
 
 type memoryListOutput struct {
@@ -52,11 +53,12 @@ type memoryDeleteOutput struct{}
 
 func (a *API) memoryUpsert(ctx context.Context, input *memoryUpsertInput) (*memoryOutput, error) {
 	entry := &model.MemoryEntry{
-		Key:     input.Body.Key,
-		Value:   input.Body.Value,
-		AgentID: input.XAgentID,
-		Tags:    input.Body.Tags,
-		Version: input.Body.Version,
+		Key:            input.Body.Key,
+		Value:          input.Body.Value,
+		AgentID:        input.XAgentID,
+		Tags:           input.Body.Tags,
+		Version:        input.Body.Version,
+		SessionContext: sessionFromCtx(ctx),
 	}
 
 	result, err := a.store.UpsertMemory(ctx, entry)
@@ -82,11 +84,12 @@ func (a *API) memoryGet(ctx context.Context, input *memoryGetInput) (*memoryOutp
 
 func (a *API) memoryList(ctx context.Context, input *memoryListInput) (*memoryListOutput, error) {
 	f := model.MemoryFilter{
-		Tag:    input.Tag,
-		Agent:  input.Agent,
-		Prefix: input.Prefix,
-		Limit:  input.Limit,
-		Offset: input.Offset,
+		Tag:        input.Tag,
+		Agent:      input.Agent,
+		Prefix:     input.Prefix,
+		SessionKey: input.SessionKey,
+		Limit:      input.Limit,
+		Offset:     input.Offset,
 	}
 	entries, err := a.store.ListMemory(ctx, f)
 	if err != nil {
