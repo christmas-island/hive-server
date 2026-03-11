@@ -77,6 +77,7 @@ func (a *API) routes() http.Handler {
 	// the auto-generated OpenAPI docs/schema endpoints.
 	r.Group(func(r chi.Router) {
 		r.Use(a.authMiddleware)
+		r.Use(timingMiddleware)
 
 		config := huma.DefaultConfig("Hive API", "1.0.0")
 		config.Info.Description = "Cross-agent memory and task coordination API."
