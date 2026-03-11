@@ -65,7 +65,7 @@ func buildMux(st *store.Store, token string, rc *relay.Client) http.Handler {
 	mux.HandleFunc("GET /version", handleVersion)
 	mux.Handle("GET /healthz", healthzHandler(st))
 	mux.Handle("/", handlers.New(st, token, rc))
-	
+
 	// Wrap the entire mux with version header middleware
 	return versionHeaderMiddleware(mux)
 }
