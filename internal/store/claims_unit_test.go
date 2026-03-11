@@ -370,24 +370,36 @@ func TestReleaseClaim_Success(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(
 		`UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3`,
 	)).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
-
-	// GetClaim after release
+	// Fetch released claim inside tx.
 	mock.ExpectQuery(regexp.QuoteMeta(
-		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
-         FROM claims WHERE id = $1`,
+		`SELECT id, type, resource, agent_id, status, metadata,
+			        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			        claimed_at, expires_at, updated_at
+			 FROM claims WHERE id = $1`,
 	)).WithArgs("claim-1").WillReturnRows(
 		sqlmock.NewRows(claimColumns).AddRow(
 			"claim-1", "conch", "r1", "a1", "released", `{}`, "", "", "", "", false, false, now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
 		),
 	)
+	// Pop next waiter — queue empty.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, resource, agent_id, type, metadata,
+		        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+		        expires_in_sec, queued_at
+		 FROM claim_queue WHERE resource = $1
+		 ORDER BY queued_at ASC LIMIT 1`,
+	)).WithArgs("r1").WillReturnRows(sqlmock.NewRows([]string{}))
+	mock.ExpectCommit()
 
 	got, err := s.ReleaseClaim(context.Background(), "claim-1")
 	if err != nil {
 		t.Fatalf("ReleaseClaim: %v", err)
 	}
-	if got.Status != model.ClaimStatusReleased {
-		t.Errorf("Status = %q, want released", got.Status)
+	if got.Claim.Status != model.ClaimStatusReleased {
+		t.Errorf("Status = %q, want released", got.Claim.Status)
+	}
+	if got.Next != nil {
+		t.Errorf("expected no next waiter, got %+v", got.Next)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)

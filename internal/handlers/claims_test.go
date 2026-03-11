@@ -69,14 +69,26 @@ func TestCreateClaim_Conflict(t *testing.T) {
 	}
 	r1.Body.Close()
 
-	// Second claim on same resource should fail with 409.
+	// Second claim on same resource should be queued (202 Accepted) instead of 409.
 	r2 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
 		"type":     "issue",
 		"resource": "ops#79",
 	}, testToken, "other-agent")
 	defer r2.Body.Close()
-	if r2.StatusCode != http.StatusConflict {
-		t.Errorf("second claim status = %d, want 409", r2.StatusCode)
+	if r2.StatusCode != http.StatusAccepted {
+		t.Errorf("second claim status = %d, want 202 (queued)", r2.StatusCode)
+	}
+	var queuedBody struct {
+		Queued   bool   `json:"queued"`
+		Position int    `json:"position"`
+		WaiterID string `json:"waiter_id"`
+	}
+	decodeJSON(t, r2, &queuedBody)
+	if !queuedBody.Queued {
+		t.Errorf("queued = false, want true")
+	}
+	if queuedBody.Position < 1 {
+		t.Errorf("position = %d, want >= 1", queuedBody.Position)
 	}
 }
 
@@ -176,10 +188,19 @@ func TestReleaseClaim(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	var released model.Claim
-	decodeJSON(t, resp, &released)
-	if released.Status != model.ClaimStatusReleased {
-		t.Errorf("Status = %q, want released", released.Status)
+	var result model.ClaimReleaseResult
+	decodeJSON(t, resp, &result)
+	if !result.Released {
+		t.Errorf("released = false, want true")
+	}
+	if result.Claim == nil {
+		t.Fatal("result.Claim is nil")
+	}
+	if result.Claim.Status != model.ClaimStatusReleased {
+		t.Errorf("Status = %q, want released", result.Claim.Status)
+	}
+	if result.Next != nil {
+		t.Errorf("expected no next waiter (empty queue), got %+v", result.Next)
 	}
 }
 
@@ -303,5 +324,82 @@ func TestRenewClaim_StoreError(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode < 400 {
 		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateClaim_Queue(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	// First claim: should be granted (201).
+	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "conch",
+		"resource": "#hive",
+	}, testToken, testAgent)
+	if r1.StatusCode != http.StatusCreated {
+		t.Fatalf("first claim status = %d, want 201", r1.StatusCode)
+	}
+	r1.Body.Close()
+
+	// Second claim: should be queued (202).
+	r2 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "conch",
+		"resource": "#hive",
+	}, testToken, "second-agent")
+	if r2.StatusCode != http.StatusAccepted {
+		t.Fatalf("second claim status = %d, want 202", r2.StatusCode)
+	}
+	var q struct {
+		Queued   bool   `json:"queued"`
+		Position int    `json:"position"`
+		WaiterID string `json:"waiter_id"`
+	}
+	decodeJSON(t, r2, &q)
+	if !q.Queued {
+		t.Error("queued = false, want true")
+	}
+	if q.WaiterID == "" {
+		t.Error("waiter_id is empty")
+	}
+}
+
+func TestReleaseClaim_WithNextWaiter(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	// Holder claims the resource.
+	r1 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "conch",
+		"resource": "#onlyclaws",
+	}, testToken, testAgent)
+	if r1.StatusCode != http.StatusCreated {
+		t.Fatalf("first claim: status = %d", r1.StatusCode)
+	}
+	var holder struct{ ID string `json:"id"` }
+	decodeJSON(t, r1, &holder)
+
+	// Second agent queues.
+	r2 := request(t, srv, http.MethodPost, "/api/v1/claims", map[string]any{
+		"type":     "conch",
+		"resource": "#onlyclaws",
+	}, testToken, "next-agent")
+	if r2.StatusCode != http.StatusAccepted {
+		t.Fatalf("second claim: status = %d, want 202", r2.StatusCode)
+	}
+	r2.Body.Close()
+
+	// Holder releases — response should include next waiter.
+	resp := request(t, srv, http.MethodDelete, "/api/v1/claims/"+holder.ID, nil, testToken, testAgent)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("release status = %d, want 200", resp.StatusCode)
+	}
+	var result model.ClaimReleaseResult
+	decodeJSON(t, resp, &result)
+	if !result.Released {
+		t.Error("released = false")
+	}
+	if result.Next == nil {
+		t.Error("expected next waiter, got nil")
+	}
+	if result.Next != nil && result.Next.AgentID != "next-agent" {
+		t.Errorf("next.AgentID = %q, want next-agent", result.Next.AgentID)
 	}
 }

@@ -173,4 +173,26 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS sandboxed       BOOLEAN NOT NULL DEF
 CREATE INDEX IF NOT EXISTS idx_memory_session ON memory(session_key);
 CREATE INDEX IF NOT EXISTS idx_tasks_session  ON tasks(session_key);
 CREATE INDEX IF NOT EXISTS idx_claims_session ON claims(session_key);
+
+-- Claim queue: agents waiting for a resource that is currently held.
+-- When the holder releases the claim, the first waiter (by queued_at) is
+-- promoted to holder atomically. TTL on waiters prevents stale queue entries.
+CREATE TABLE IF NOT EXISTS claim_queue (
+    id             TEXT    NOT NULL PRIMARY KEY,
+    resource       TEXT    NOT NULL,
+    agent_id       TEXT    NOT NULL,
+    type           TEXT    NOT NULL,
+    metadata       JSONB   NOT NULL DEFAULT '{}',
+    session_key    TEXT    NOT NULL DEFAULT '',
+    session_id     TEXT    NOT NULL DEFAULT '',
+    channel        TEXT    NOT NULL DEFAULT '',
+    sender_id      TEXT    NOT NULL DEFAULT '',
+    sender_is_owner BOOLEAN NOT NULL DEFAULT false,
+    sandboxed      BOOLEAN NOT NULL DEFAULT false,
+    expires_in_sec INTEGER NOT NULL DEFAULT 3600,
+    queued_at      TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_queue_resource ON claim_queue(resource, queued_at);
+CREATE INDEX IF NOT EXISTS idx_claim_queue_agent    ON claim_queue(agent_id);
 `
