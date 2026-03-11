@@ -10,11 +10,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 )
 
 // EnqueueClaim adds an agent to the waiting queue for a resource.
 // Returns the waiter record and the agent's position in the queue (1-based).
 func (s *Store) EnqueueClaim(ctx context.Context, w *model.ClaimWaiter) (*model.ClaimWaiter, int, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	w.ID = uuid.New().String()
 	now := time.Now().UTC()
 	w.QueuedAt = now
@@ -65,6 +67,7 @@ func (s *Store) EnqueueClaim(ctx context.Context, w *model.ClaimWaiter) (*model.
 // or returns nil if the queue is empty. Must be called inside a transaction
 // that is also promoting the waiter to claim holder (for atomicity).
 func (s *Store) PopNextWaiter(ctx context.Context, tx *sql.Tx, resource string) (*model.ClaimWaiter, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	// Find the earliest queued entry.
 	row := tx.QueryRowContext(ctx,
 		`SELECT id, resource, agent_id, type, metadata,
@@ -125,6 +128,7 @@ func sweepExpiredWaiters(ctx context.Context, tx *sql.Tx, now time.Time) error {
 
 // QueueDepth returns the number of agents waiting for a resource.
 func (s *Store) QueueDepth(ctx context.Context, resource string) (int, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	var n int
 	row := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM claim_queue WHERE resource = $1`, resource)
 	return n, row.Scan(&n)

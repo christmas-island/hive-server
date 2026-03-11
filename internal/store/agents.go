@@ -58,6 +58,7 @@ func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
 
 // ListAgents returns all known agents, computing presence from last_heartbeat.
 func (s *Store) ListAgents(ctx context.Context) ([]*model.Agent, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents ORDER BY id ASC`,
 	)
