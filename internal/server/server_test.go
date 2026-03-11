@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -170,6 +173,31 @@ func TestRunClaimExpiry_TickerPath_Success(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+func TestBuildMux(t *testing.T) {
+	// buildMux should return a valid mux that routes /version correctly.
+	mux := buildMux(nil, "", nil)
+	if mux == nil {
+		t.Fatal("buildMux returned nil")
+	}
+
+	// Verify /version endpoint is wired up.
+	SetVersionInfo("test-build", "cafebabe", "2026-03-11")
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /version status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var vi VersionInfo
+	if err := json.NewDecoder(w.Body).Decode(&vi); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if vi.Version != "test-build" {
+		t.Errorf("Version = %q, want test-build", vi.Version)
+	}
 }
 
 func TestLogVersionInfo(t *testing.T) {

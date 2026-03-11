@@ -56,6 +56,18 @@ func runClaimExpiry(ctx context.Context, ce claimExpirer) {
 	}
 }
 
+// buildMux creates the top-level HTTP mux with health probes, version endpoint,
+// and the API handler.
+func buildMux(st *store.Store, token string, rc *relay.Client) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", handleHealth)
+	mux.HandleFunc("GET /ready", handleReady)
+	mux.HandleFunc("GET /version", handleVersion)
+	mux.Handle("GET /healthz", healthzHandler(st))
+	mux.Handle("/", handlers.New(st, token, rc))
+	return mux
+}
+
 // logVersionInfo logs the build-time version metadata at startup.
 func logVersionInfo() {
 	vi := GetVersionInfo()
@@ -86,12 +98,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Build top-level mux: health probes bypass auth, everything else goes to
 	// the API handler (which owns auth middleware and Huma routing).
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", handleHealth)
-	mux.HandleFunc("GET /ready", handleReady)
-	mux.HandleFunc("GET /version", handleVersion)
-	mux.Handle("GET /healthz", healthzHandler(s.store))
-	mux.Handle("/", handlers.New(s.store, s.config.Token, rc))
+	mux := buildMux(s.store, s.config.Token, rc)
 
 	s.srv = &http.Server{
 		Addr:         s.config.BindAddr,
