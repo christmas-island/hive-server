@@ -30,7 +30,7 @@ type Store interface {
 	UpdateTask(ctx context.Context, id string, upd model.TaskUpdate) (*model.Task, error)
 	DeleteTask(ctx context.Context, id string) error
 	// Agents
-	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus, hiveLocalVersion string) (*model.Agent, error)
+	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus, hiveLocalVersion, hivePluginVersion string) (*model.Agent, error)
 	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
 	// Claims

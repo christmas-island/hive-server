@@ -118,11 +118,12 @@ CREATE TABLE IF NOT EXISTS discovery_roles (
     updated_at TEXT NOT NULL
 );
 
-ALTER TABLE agents ADD COLUMN IF NOT EXISTS discord_user_id    TEXT NOT NULL DEFAULT '';
-ALTER TABLE agents ADD COLUMN IF NOT EXISTS home_channel        TEXT NOT NULL DEFAULT '';
-ALTER TABLE agents ADD COLUMN IF NOT EXISTS mention_format      TEXT NOT NULL DEFAULT '';
-ALTER TABLE agents ADD COLUMN IF NOT EXISTS channels            JSONB NOT NULL DEFAULT '[]';
-ALTER TABLE agents ADD COLUMN IF NOT EXISTS hive_local_version  TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS discord_user_id     TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS home_channel         TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS mention_format       TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS channels             JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS hive_local_version   TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS hive_plugin_version  TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory(agent_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);

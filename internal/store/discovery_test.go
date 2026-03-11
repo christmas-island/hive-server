@@ -139,7 +139,7 @@ func TestUpsertAgentMeta(t *testing.T) {
 	s := newTestStore(t)
 
 	// Create the agent via Heartbeat first.
-	_, err := s.Heartbeat(t.Context(), "meta-agent", []string{"test"}, model.AgentStatusOnline, "")
+	_, err := s.Heartbeat(t.Context(), "meta-agent", []string{"test"}, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestListDiscoveryAgents(t *testing.T) {
 	}
 
 	for _, id := range []string{"da1", "da2"} {
-		_, err := s.Heartbeat(t.Context(), id, nil, model.AgentStatusOnline, "")
+		_, err := s.Heartbeat(t.Context(), id, nil, model.AgentStatusOnline, "", "")
 		if err != nil {
 			t.Fatalf("Heartbeat %s: %v", id, err)
 		}

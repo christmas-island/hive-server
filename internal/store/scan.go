@@ -15,7 +15,7 @@ import (
 func scanAgentRow(row *sql.Row) (*model.Agent, error) {
 	var a model.Agent
 	var capsRaw, hbStr, regStr string
-	err := row.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion)
+	err := row.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion, &a.HivePluginVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.ErrNotFound
 	}
@@ -28,7 +28,7 @@ func scanAgentRow(row *sql.Row) (*model.Agent, error) {
 func scanAgentRows(rows *sql.Rows) (*model.Agent, error) {
 	var a model.Agent
 	var capsRaw, hbStr, regStr string
-	if err := rows.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion); err != nil {
+	if err := rows.Scan(&a.ID, &a.Name, &a.Status, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion, &a.HivePluginVersion); err != nil {
 		return nil, fmt.Errorf("scan agent row: %w", err)
 	}
 	return finishAgentScan(&a, capsRaw, hbStr, regStr)
