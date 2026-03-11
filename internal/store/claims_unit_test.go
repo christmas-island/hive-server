@@ -641,3 +641,200 @@ func TestExpireOldClaims_ExecError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+// --- Claim queue unit tests ---
+
+func TestEnqueueClaim_Success(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	now := time.Now().UTC()
+	w := &model.ClaimWaiter{
+		Resource:     "conch#hive",
+		AgentID:      "waiter-agent",
+		Type:         model.ClaimTypeConch,
+		ExpiresInSec: 3600,
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(
+		`INSERT INTO claim_queue (id, resource, agent_id, type, metadata,
+			 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			 expires_in_sec, queued_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT COUNT(*) FROM claim_queue WHERE resource = $1`,
+	)).WithArgs("conch#hive").WillReturnRows(
+		sqlmock.NewRows([]string{"count"}).AddRow(1),
+	)
+	mock.ExpectCommit()
+
+	result, pos, err := s.EnqueueClaim(context.Background(), w)
+	if err != nil {
+		t.Fatalf("EnqueueClaim: %v", err)
+	}
+	if result.ID == "" {
+		t.Error("ID is empty")
+	}
+	if pos != 1 {
+		t.Errorf("position = %d, want 1", pos)
+	}
+	if result.QueuedAt.IsZero() {
+		t.Error("QueuedAt should not be zero")
+	}
+	_ = now
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestEnqueueClaim_InsertError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	dbErr := errors.New("insert failed")
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(
+		`INSERT INTO claim_queue`,
+	)).WillReturnError(dbErr)
+	mock.ExpectRollback()
+
+	_, _, err := s.EnqueueClaim(context.Background(), &model.ClaimWaiter{
+		Resource:     "r1",
+		AgentID:      "agent1",
+		Type:         model.ClaimTypeConch,
+		ExpiresInSec: 3600,
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestQueueDepth_Success(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT COUNT(*) FROM claim_queue WHERE resource = $1`,
+	)).WithArgs("conch#hive").WillReturnRows(
+		sqlmock.NewRows([]string{"count"}).AddRow(3),
+	)
+
+	depth, err := s.QueueDepth(context.Background(), "conch#hive")
+	if err != nil {
+		t.Fatalf("QueueDepth: %v", err)
+	}
+	if depth != 3 {
+		t.Errorf("depth = %d, want 3", depth)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestReleaseClaim_WithNextWaiter(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	now := time.Now().UTC()
+
+	mock.ExpectBegin()
+	// Update claim.
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
+	// Fetch released claim.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, type, resource, agent_id, status, metadata,
+			        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			        claimed_at, expires_at, updated_at
+			 FROM claims WHERE id = $1`,
+	)).WithArgs("claim-1").WillReturnRows(
+		sqlmock.NewRows(claimColumns).AddRow(
+			"claim-1", "conch", "conch#hive", "holder", "released", `{}`, "", "", "", "", false, false,
+			now.Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+		),
+	)
+	// Pop next waiter — returns one.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, resource, agent_id, type, metadata,
+		        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+		        expires_in_sec, queued_at
+		 FROM claim_queue WHERE resource = $1
+		 ORDER BY queued_at ASC LIMIT 1`,
+	)).WithArgs("conch#hive").WillReturnRows(
+		sqlmock.NewRows(waiterColumns).AddRow(
+			"w1", "conch#hive", "next-agent", "conch", `{}`, "", "", "", "", false, false, 3600, now.Format(time.RFC3339Nano),
+		),
+	)
+	// Delete popped waiter.
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM claim_queue WHERE id = $1`)).
+		WithArgs("w1").WillReturnResult(sqlmock.NewResult(0, 1))
+	// Insert promoted claim.
+	mock.ExpectExec(regexp.QuoteMeta(
+		`INSERT INTO claims (id, type, resource, agent_id, status, metadata,
+			 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			 claimed_at, expires_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	result, err := s.ReleaseClaim(context.Background(), "claim-1")
+	if err != nil {
+		t.Fatalf("ReleaseClaim: %v", err)
+	}
+	if !result.Released {
+		t.Error("released = false")
+	}
+	if result.Next == nil {
+		t.Fatal("expected next waiter, got nil")
+	}
+	if result.Next.AgentID != "next-agent" {
+		t.Errorf("next.AgentID = %q, want next-agent", result.Next.AgentID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestExpireOldClaims_StaleWaiterPurged(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	now := time.Now().UTC()
+	// A waiter that queued 2 hours ago with a 1-hour TTL = stale.
+	staleQueued := now.Add(-2 * time.Hour).Format(time.RFC3339Nano)
+
+	mock.ExpectBegin()
+	// sweepExpiredWaiters: returns one stale entry.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)).WillReturnRows(
+		sqlmock.NewRows(waiterSweepCols).AddRow("stale-w1", 3600, staleQueued),
+	)
+	// Delete the stale entry.
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM claim_queue WHERE id = $1`)).
+		WithArgs("stale-w1").WillReturnResult(sqlmock.NewResult(0, 1))
+	// No expired resources.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT DISTINCT resource FROM claims
+		 WHERE status = $1 AND expires_at < $2`,
+	)).WillReturnRows(sqlmock.NewRows([]string{"resource"}))
+	// Expire update — 0 rows.
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE claims SET status = $1, updated_at = $2 WHERE status = $3 AND expires_at < $4`,
+	)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	n, err := s.ExpireOldClaims(context.Background())
+	if err != nil {
+		t.Fatalf("ExpireOldClaims: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("count = %d, want 0", n)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
