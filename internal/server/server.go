@@ -83,6 +83,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /ready", handleReady)
+	mux.HandleFunc("GET /version", handleVersion)
 	mux.Handle("GET /healthz", healthzHandler(s.store))
 	mux.Handle("/", handlers.New(s.store, s.config.Token, rc))
 
@@ -105,6 +106,8 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}()
 
+	vi := GetVersionInfo()
+	log.Info(fmt.Sprintf("hive-server version=%s commit=%s date=%s", vi.Version, vi.Commit, vi.Date))
 	log.Info("HTTP server starting on ", s.config.BindAddr)
 	if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("listen: %w", err)

@@ -25,6 +25,13 @@ func handleReady(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 }
 
+// handleVersion handles GET /version.
+func handleVersion(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(GetVersionInfo())
+}
+
 // healthzHandler returns an http.HandlerFunc for GET /healthz with database connectivity check.
 func healthzHandler(p pinger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
