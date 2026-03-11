@@ -24,6 +24,8 @@ type mockStore struct {
 	channels        map[string]*model.DiscoveryChannel
 	roles           map[string]*model.DiscoveryRole
 	claims          map[string]*model.Claim
+	// claimQueue holds per-resource FIFO queues of waiters.
+	claimQueue map[string][]*model.ClaimWaiter
 
 	// forceErr maps a method name to an error that will be returned on the
 	// next call (consumed once). Use injectErr to set it.
@@ -46,6 +48,7 @@ func newMockStore() *mockStore {
 		channels:        make(map[string]*model.DiscoveryChannel),
 		roles:           make(map[string]*model.DiscoveryRole),
 		claims:          make(map[string]*model.Claim),
+		claimQueue:      make(map[string][]*model.ClaimWaiter),
 		forceErr:        make(map[string]error),
 	}
 }
@@ -663,7 +666,23 @@ func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model
 	return result, nil
 }
 
-func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.Claim, error) {
+func (m *mockStore) EnqueueClaim(_ context.Context, w *model.ClaimWaiter) (*model.ClaimWaiter, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("EnqueueClaim"); err != nil {
+		return nil, 0, err
+	}
+	w.ID = "waiter-" + w.AgentID
+	w.QueuedAt = time.Now().UTC()
+	m.claimQueue[w.Resource] = append(m.claimQueue[w.Resource], w)
+	return w, len(m.claimQueue[w.Resource]), nil
+}
+
+func (m *mockStore) QueueDepth(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.ClaimReleaseResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.consumeErr("ReleaseClaim"); err != nil {
@@ -676,7 +695,16 @@ func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.Claim, er
 	}
 	c.Status = model.ClaimStatusReleased
 	c.UpdatedAt = time.Now().UTC()
-	return copyClaim(c), nil
+
+	// Pop next waiter from queue (FIFO).
+	var next *model.ClaimWaiter
+	queue := m.claimQueue[c.Resource]
+	if len(queue) > 0 {
+		next = queue[0]
+		m.claimQueue[c.Resource] = queue[1:]
+	}
+
+	return &model.ClaimReleaseResult{Released: true, Claim: copyClaim(c), Next: next}, nil
 }
 
 func (m *mockStore) RenewClaim(_ context.Context, id string, expiresAt time.Time) (*model.Claim, error) {

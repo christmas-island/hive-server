@@ -35,11 +35,13 @@ type Store interface {
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
 	// Claims
 	CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, error)
+	EnqueueClaim(ctx context.Context, w *model.ClaimWaiter) (*model.ClaimWaiter, int, error)
 	GetClaim(ctx context.Context, id string) (*model.Claim, error)
 	ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.Claim, error)
-	ReleaseClaim(ctx context.Context, id string) (*model.Claim, error)
+	ReleaseClaim(ctx context.Context, id string) (*model.ClaimReleaseResult, error)
 	RenewClaim(ctx context.Context, id string, expiresAt time.Time) (*model.Claim, error)
 	ExpireOldClaims(ctx context.Context) (int64, error)
+	QueueDepth(ctx context.Context, resource string) (int, error)
 	// Discovery
 	UpsertChannel(ctx context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error)
 	GetChannel(ctx context.Context, id string) (*model.DiscoveryChannel, error)

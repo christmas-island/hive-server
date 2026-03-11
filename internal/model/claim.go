@@ -44,3 +44,32 @@ type ClaimFilter struct {
 	Limit      int
 	Offset     int
 }
+
+// ClaimWaiter represents an agent waiting in the claim queue for a resource.
+type ClaimWaiter struct {
+	ID           string            `json:"id"`
+	Resource     string            `json:"resource"`
+	AgentID      string            `json:"agent_id"`
+	Type         ClaimType         `json:"type"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+	SessionContext `json:",inline"`
+	ExpiresInSec int               `json:"expires_in_sec"`
+	QueuedAt     time.Time         `json:"queued_at"`
+}
+
+// ClaimQueueResult is returned when a claim request is queued instead of
+// immediately granted (resource already held by another agent).
+type ClaimQueueResult struct {
+	Queued   bool   `json:"queued"`
+	Position int    `json:"position"`
+	WaiterID string `json:"waiter_id"`
+	Resource string `json:"resource"`
+}
+
+// ClaimReleaseResult is returned on a successful release. Next is non-nil
+// when there was a waiter in the queue — they have been promoted to holder.
+type ClaimReleaseResult struct {
+	Released bool         `json:"released"`
+	Claim    *Claim       `json:"claim"`
+	Next     *ClaimWaiter `json:"next,omitempty"`
+}

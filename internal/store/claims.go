@@ -129,10 +129,17 @@ func (s *Store) ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.C
 	return claims, nil
 }
 
-// ReleaseClaim sets a claim's status to released.
-func (s *Store) ReleaseClaim(ctx context.Context, id string) (*model.Claim, error) {
+// ReleaseClaim sets a claim's status to released and atomically promotes the
+// next waiter in the queue (if any) to a new active claim on the same resource.
+// Returns a ClaimReleaseResult with the released claim and the next holder (if any).
+func (s *Store) ReleaseClaim(ctx context.Context, id string) (*model.ClaimReleaseResult, error) {
+	var released *model.Claim
+	var next *model.ClaimWaiter
+
 	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC()
+
+		// Release the current claim.
 		res, err := tx.ExecContext(ctx,
 			`UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3`,
 			string(model.ClaimStatusReleased), now.Format(time.RFC3339Nano), id,
@@ -144,12 +151,63 @@ func (s *Store) ReleaseClaim(ctx context.Context, id string) (*model.Claim, erro
 		if n == 0 {
 			return model.ErrNotFound
 		}
-		return nil
+
+		// Fetch the released claim to learn the resource.
+		row := tx.QueryRowContext(ctx,
+			`SELECT id, type, resource, agent_id, status, metadata,
+			        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			        claimed_at, expires_at, updated_at
+			 FROM claims WHERE id = $1`, id,
+		)
+		released, err = scanClaimRowTx(row)
+		if err != nil {
+			return fmt.Errorf("fetch released claim: %w", err)
+		}
+
+		// Pop the next waiter from the queue (FIFO).
+		next, err = s.PopNextWaiter(ctx, tx, released.Resource)
+		if err != nil {
+			return fmt.Errorf("pop next waiter: %w", err)
+		}
+		if next == nil {
+			return nil // queue empty, nothing to promote
+		}
+
+		// Promote the next waiter to active claim holder.
+		metaJSON, _ := json.Marshal(next.Metadata)
+		if next.Metadata == nil {
+			metaJSON = []byte(`{}`)
+		}
+		newClaimID := uuid.New().String()
+		expiresAt := now.Add(time.Duration(next.ExpiresInSec) * time.Second)
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO claims (id, type, resource, agent_id, status, metadata,
+			 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			 claimed_at, expires_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+			newClaimID, string(next.Type), next.Resource, next.AgentID,
+			string(model.ClaimStatusActive), string(metaJSON),
+			next.SessionContext.SessionKey, next.SessionContext.SessionID,
+			next.SessionContext.Channel, next.SessionContext.SenderID,
+			next.SessionContext.SenderIsOwner, next.SessionContext.Sandboxed,
+			now.Format(time.RFC3339Nano), expiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano),
+		)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.GetClaim(ctx, id)
+
+	return &model.ClaimReleaseResult{
+		Released: true,
+		Claim:    released,
+		Next:     next,
+	}, nil
+}
+
+// scanClaimRowTx scans a claim row from a *sql.Row inside a transaction.
+func scanClaimRowTx(row *sql.Row) (*model.Claim, error) {
+	return scanClaimRow(row)
 }
 
 // RenewClaim extends the expiry of an active claim.
