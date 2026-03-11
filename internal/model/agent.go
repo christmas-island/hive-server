@@ -13,10 +13,11 @@ const (
 
 // Agent represents a registered agent.
 type Agent struct {
-	ID            string      `json:"id"`
-	Name          string      `json:"name"`
-	Status        AgentStatus `json:"status"`
-	Capabilities  []string    `json:"capabilities"`
-	LastHeartbeat time.Time   `json:"last_heartbeat"`
-	RegisteredAt  time.Time   `json:"registered_at"`
+	ID               string      `json:"id"`
+	Name             string      `json:"name"`
+	Status           AgentStatus `json:"status"`
+	Capabilities     []string    `json:"capabilities"`
+	LastHeartbeat    time.Time   `json:"last_heartbeat"`
+	RegisteredAt     time.Time   `json:"registered_at"`
+	HiveLocalVersion string      `json:"hive_local_version,omitempty"` // semver reported by hive-local
 }

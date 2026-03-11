@@ -26,8 +26,8 @@ func TestDiscoveryListAgents(t *testing.T) {
 
 	// Seed two agents via heartbeat in mock.
 	ctx := t.Context()
-	_, _ = ms.Heartbeat(ctx, "agent-a", []string{"memory"}, model.AgentStatusOnline)
-	_, _ = ms.Heartbeat(ctx, "agent-b", []string{"tasks"}, model.AgentStatusIdle)
+	_, _ = ms.Heartbeat(ctx, "agent-a", []string{"memory"}, model.AgentStatusOnline, "")
+	_, _ = ms.Heartbeat(ctx, "agent-b", []string{"tasks"}, model.AgentStatusIdle, "")
 
 	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/agents", nil, "", "")
 	if resp.StatusCode != http.StatusOK {
@@ -45,7 +45,7 @@ func TestDiscoveryGetAgent(t *testing.T) {
 	srv, ms := newMockServer(t)
 
 	ctx := t.Context()
-	_, _ = ms.Heartbeat(ctx, "smokeyclaw", []string{"memory"}, model.AgentStatusOnline)
+	_, _ = ms.Heartbeat(ctx, "smokeyclaw", []string{"memory"}, model.AgentStatusOnline, "")
 
 	resp := request(t, srv, http.MethodGet, "/api/v1/discovery/agents/smokeyclaw", nil, "", "")
 	if resp.StatusCode != http.StatusOK {
@@ -95,7 +95,7 @@ func TestDiscoveryPutAgentMeta(t *testing.T) {
 
 	// Seed agent first.
 	ctx := t.Context()
-	_, _ = ms.Heartbeat(ctx, "smokeyclaw", []string{"memory"}, model.AgentStatusOnline)
+	_, _ = ms.Heartbeat(ctx, "smokeyclaw", []string{"memory"}, model.AgentStatusOnline, "")
 
 	resp := request(t, srv, http.MethodPut, "/api/v1/discovery/agents/smokeyclaw", map[string]any{
 		"discord_user_id": "111222333",
@@ -311,7 +311,7 @@ func TestDiscoveryGetRouting(t *testing.T) {
 	srv, ms := newMockServer(t)
 
 	ctx := t.Context()
-	_, _ = ms.Heartbeat(ctx, "routeagent", nil, model.AgentStatusOnline)
+	_, _ = ms.Heartbeat(ctx, "routeagent", nil, model.AgentStatusOnline, "")
 	_, _ = ms.UpsertAgentMeta(ctx, "routeagent", &model.DiscoveryAgentMeta{
 		MentionFormat: "@RouteAgent",
 		HomeChannel:   "routeagent",
