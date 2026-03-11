@@ -26,6 +26,7 @@ type mockStore struct {
 	claims          map[string]*model.Claim
 	// claimQueue holds per-resource FIFO queues of waiters.
 	claimQueue map[string][]*model.ClaimWaiter
+	sessions   map[string]*model.CapturedSession
 
 	// forceErr maps a method name to an error that will be returned on the
 	// next call (consumed once). Use injectErr to set it.
@@ -819,4 +820,57 @@ func sliceContains(ss []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// --- Session capture mock methods ---
+
+func (m *mockStore) CreateCapturedSession(_ context.Context, cs *model.CapturedSession) (*model.CapturedSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("CreateCapturedSession"); err != nil {
+		return nil, err
+	}
+	if m.sessions == nil {
+		m.sessions = map[string]*model.CapturedSession{}
+	}
+	if cs.ID == "" {
+		cs.ID = "test-session-" + cs.AgentID
+	}
+	m.sessions[cs.ID] = cs
+	return cs, nil
+}
+
+func (m *mockStore) GetCapturedSession(_ context.Context, id string) (*model.CapturedSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("GetCapturedSession"); err != nil {
+		return nil, err
+	}
+	if m.sessions == nil {
+		return nil, model.ErrNotFound
+	}
+	cs, ok := m.sessions[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	return cs, nil
+}
+
+func (m *mockStore) ListCapturedSessions(_ context.Context, f model.SessionFilter) ([]*model.CapturedSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("ListCapturedSessions"); err != nil {
+		return nil, err
+	}
+	var result []*model.CapturedSession
+	for _, cs := range m.sessions {
+		if f.AgentID != "" && cs.AgentID != f.AgentID {
+			continue
+		}
+		if f.Repo != "" && cs.Repo != f.Repo {
+			continue
+		}
+		result = append(result, cs)
+	}
+	return result, nil
 }

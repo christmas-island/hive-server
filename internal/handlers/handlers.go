@@ -54,6 +54,10 @@ type Store interface {
 	UpsertAgentMeta(ctx context.Context, id string, meta *model.DiscoveryAgentMeta) (*model.DiscoveryAgent, error)
 	GetDiscoveryAgent(ctx context.Context, id string) (*model.DiscoveryAgent, error)
 	ListDiscoveryAgents(ctx context.Context) ([]*model.DiscoveryAgent, error)
+	// Session capture
+	CreateCapturedSession(ctx context.Context, s *model.CapturedSession) (*model.CapturedSession, error)
+	GetCapturedSession(ctx context.Context, id string) (*model.CapturedSession, error)
+	ListCapturedSessions(ctx context.Context, f model.SessionFilter) ([]*model.CapturedSession, error)
 }
 
 // API holds dependencies for all handlers.
@@ -91,6 +95,7 @@ func (a *API) routes() http.Handler {
 		registerAgents(a, api)
 		registerDiscovery(a, api)
 		registerClaims(a, api)
+		registerSessions(a, api)
 	})
 
 	return r

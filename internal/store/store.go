@@ -195,4 +195,31 @@ CREATE TABLE IF NOT EXISTS claim_queue (
 
 CREATE INDEX IF NOT EXISTS idx_claim_queue_resource ON claim_queue(resource, queued_at);
 CREATE INDEX IF NOT EXISTS idx_claim_queue_agent    ON claim_queue(agent_id);
+
+-- Captured sessions: recorded agent sessions shipped by OpenClaw/ACP harness.
+CREATE TABLE IF NOT EXISTS captured_sessions (
+    id               TEXT      NOT NULL PRIMARY KEY,
+    agent_id         TEXT      NOT NULL DEFAULT '',
+    session_key      TEXT      NOT NULL DEFAULT '',
+    session_id       TEXT      NOT NULL DEFAULT '',
+    channel          TEXT      NOT NULL DEFAULT '',
+    sender_id        TEXT      NOT NULL DEFAULT '',
+    model            TEXT      NOT NULL DEFAULT '',
+    provider         TEXT      NOT NULL DEFAULT '',
+    started_at       TEXT      NOT NULL DEFAULT '',
+    finished_at      TEXT      NOT NULL DEFAULT '',
+    repo             TEXT      NOT NULL DEFAULT '',
+    paths            JSONB     NOT NULL DEFAULT '[]',
+    summary          TEXT      NOT NULL DEFAULT '',
+    turns            JSONB     NOT NULL DEFAULT '[]',
+    tool_calls       JSONB     NOT NULL DEFAULT '[]',
+    metadata         JSONB     NOT NULL DEFAULT '{}',
+    parent_session_id TEXT     NOT NULL DEFAULT '',
+    usage            JSONB     NOT NULL DEFAULT '{}',
+    created_at       TEXT      NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_captured_sessions_agent   ON captured_sessions(agent_id);
+CREATE INDEX IF NOT EXISTS idx_captured_sessions_repo    ON captured_sessions(repo);
+CREATE INDEX IF NOT EXISTS idx_captured_sessions_started ON captured_sessions(started_at);
 `
