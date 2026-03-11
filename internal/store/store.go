@@ -125,8 +125,10 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS channels             JSONB NOT NULL 
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS hive_local_version   TEXT NOT NULL DEFAULT '';
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS hive_plugin_version  TEXT NOT NULL DEFAULT '';
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS activity             TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS token                TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agents_token ON agents(token) WHERE token IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
 CREATE INDEX IF NOT EXISTS idx_tasks_creator  ON tasks(creator);

@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -53,7 +55,7 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
 	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version FROM agents WHERE id = $1`,
+		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
 		id,
 	)
 	return scanAgentRow(row)
@@ -63,7 +65,7 @@ func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
 func (s *Store) ListAgents(ctx context.Context) ([]*model.Agent, error) {
 	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents ORDER BY id ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list agents: %w", err)
@@ -79,4 +81,39 @@ func (s *Store) ListAgents(ctx context.Context) ([]*model.Agent, error) {
 		agents = append(agents, a)
 	}
 	return agents, rows.Err()
+}
+
+// GenerateAgentToken creates a new agent token or retrieves existing one.
+// If an agent doesn't exist yet, it's created with online status.
+// Returns the agent with the newly generated token (only set if this call generated it).
+func (s *Store) GenerateAgentToken(ctx context.Context, id string) (*model.Agent, error) {
+	defer timing.TrackDB(ctx, time.Now())
+
+	// Generate a secure random token: 32 bytes base64-encoded = 44 chars
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, fmt.Errorf("generate token: %w", err)
+	}
+	token := base64.StdEncoding.EncodeToString(tokenBytes)
+
+	now := time.Now().UTC()
+	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
+		// Upsert: create or update agent with new token
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at, token)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (id) DO UPDATE SET
+				token = EXCLUDED.token
+		`, id, id, string(model.AgentStatusOnline), "[]", now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), token)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("save agent token: %w", err)
+	}
+
+	agent, err := s.GetAgent(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve agent after token generation: %w", err)
+	}
+	return agent, nil
 }
