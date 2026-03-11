@@ -161,7 +161,7 @@ jobs:
           git diff --quiet && echo "No changes to commit" && exit 0
           git checkout -b "${BRANCH}"
           git add hive-server/
-          git commit -m "chore: bump hive-server to sha-${SHA} [skip ci]"
+          git commit -m "chore: bump hive-server to sha-${SHA}"
           git push --force origin "${BRANCH}"
           gh pr create \
             --repo christmas-island/k8s \
