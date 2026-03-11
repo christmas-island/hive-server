@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 )
 
 // --- Channels ---
 
 // UpsertChannel inserts or updates a discovery channel record.
 func (s *Store) UpsertChannel(ctx context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	now := time.Now().UTC()
 	membersJSON, err := json.Marshal(ch.Members)
 	if err != nil {
@@ -47,6 +49,7 @@ func (s *Store) UpsertChannel(ctx context.Context, ch *model.DiscoveryChannel) (
 
 // GetChannel retrieves a single channel by ID.
 func (s *Store) GetChannel(ctx context.Context, id string) (*model.DiscoveryChannel, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, discord_id, purpose, category, members, created_at, updated_at
 		 FROM discovery_channels WHERE id = $1`,
@@ -57,6 +60,7 @@ func (s *Store) GetChannel(ctx context.Context, id string) (*model.DiscoveryChan
 
 // ListChannels returns all discovery channels ordered by ID.
 func (s *Store) ListChannels(ctx context.Context) ([]*model.DiscoveryChannel, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, discord_id, purpose, category, members, created_at, updated_at
 		 FROM discovery_channels ORDER BY id ASC`,
@@ -79,6 +83,7 @@ func (s *Store) ListChannels(ctx context.Context) ([]*model.DiscoveryChannel, er
 
 // DeleteChannel removes a channel by ID, returning ErrNotFound if it doesn't exist.
 func (s *Store) DeleteChannel(ctx context.Context, id string) error {
+	defer timing.TrackDB(ctx, time.Now())
 	res, err := s.db.ExecContext(ctx, `DELETE FROM discovery_channels WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete channel: %w", err)
@@ -94,6 +99,7 @@ func (s *Store) DeleteChannel(ctx context.Context, id string) error {
 
 // UpsertRole inserts or updates a discovery role record.
 func (s *Store) UpsertRole(ctx context.Context, role *model.DiscoveryRole) (*model.DiscoveryRole, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	now := time.Now().UTC()
 	membersJSON, err := json.Marshal(role.Members)
 	if err != nil {
@@ -124,6 +130,7 @@ func (s *Store) UpsertRole(ctx context.Context, role *model.DiscoveryRole) (*mod
 
 // GetRole retrieves a single role by ID.
 func (s *Store) GetRole(ctx context.Context, id string) (*model.DiscoveryRole, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, discord_id, members, created_at, updated_at
 		 FROM discovery_roles WHERE id = $1`,
@@ -134,6 +141,7 @@ func (s *Store) GetRole(ctx context.Context, id string) (*model.DiscoveryRole, e
 
 // ListRoles returns all discovery roles ordered by ID.
 func (s *Store) ListRoles(ctx context.Context) ([]*model.DiscoveryRole, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, discord_id, members, created_at, updated_at
 		 FROM discovery_roles ORDER BY id ASC`,
@@ -156,6 +164,7 @@ func (s *Store) ListRoles(ctx context.Context) ([]*model.DiscoveryRole, error) {
 
 // DeleteRole removes a role by ID, returning ErrNotFound if it doesn't exist.
 func (s *Store) DeleteRole(ctx context.Context, id string) error {
+	defer timing.TrackDB(ctx, time.Now())
 	res, err := s.db.ExecContext(ctx, `DELETE FROM discovery_roles WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete role: %w", err)
@@ -172,6 +181,7 @@ func (s *Store) DeleteRole(ctx context.Context, id string) error {
 // UpsertAgentMeta updates the discovery metadata columns on an existing agent record.
 // Returns ErrNotFound if no agent with the given ID exists.
 func (s *Store) UpsertAgentMeta(ctx context.Context, id string, meta *model.DiscoveryAgentMeta) (*model.DiscoveryAgent, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	channelsJSON, err := json.Marshal(meta.Channels)
 	if err != nil {
 		return nil, fmt.Errorf("marshal channels: %w", err)
@@ -207,6 +217,7 @@ func (s *Store) UpsertAgentMeta(ctx context.Context, id string, meta *model.Disc
 
 // GetDiscoveryAgent retrieves a single agent with its discovery metadata by ID.
 func (s *Store) GetDiscoveryAgent(ctx context.Context, id string) (*model.DiscoveryAgent, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, status, capabilities, last_heartbeat, registered_at,
 		       discord_user_id, home_channel, mention_format, channels
@@ -218,6 +229,7 @@ func (s *Store) GetDiscoveryAgent(ctx context.Context, id string) (*model.Discov
 
 // ListDiscoveryAgents returns all agents with their discovery metadata.
 func (s *Store) ListDiscoveryAgents(ctx context.Context) ([]*model.DiscoveryAgent, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, status, capabilities, last_heartbeat, registered_at,
 		       discord_user_id, home_channel, mention_format, channels

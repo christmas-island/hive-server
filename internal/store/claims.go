@@ -244,6 +244,7 @@ func (s *Store) RenewClaim(ctx context.Context, id string, expiresAt time.Time) 
 // each expired resource promotes the next queued waiter to active holder.
 // Also purges stale queue entries whose queue TTL has elapsed.
 func (s *Store) ExpireOldClaims(ctx context.Context) (int64, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	var count int64
 	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC()

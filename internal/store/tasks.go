@@ -225,6 +225,7 @@ func (s *Store) DeleteTask(ctx context.Context, id string) error {
 
 // loadTaskNotes fetches all notes for a task and attaches them.
 func (s *Store) loadTaskNotes(ctx context.Context, t *model.Task) error {
+	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT note FROM task_notes WHERE task_id = $1 ORDER BY created_at ASC, id ASC`,
 		t.ID,
