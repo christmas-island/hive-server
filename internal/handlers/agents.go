@@ -57,6 +57,14 @@ type agentUsageOutput struct {
 	}
 }
 
+type agentOnboardInput struct {
+	ID string `path:"id" doc:"Agent ID to onboard"`
+}
+
+type agentOnboardOutput struct {
+	Body *model.Agent
+}
+
 // --- Handlers ---
 
 func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*agentOutput, error) {
@@ -127,6 +135,14 @@ func (a *API) agentUsage(ctx context.Context, input *agentUsageInput) (*agentUsa
 	return out, nil
 }
 
+func (a *API) agentOnboard(ctx context.Context, input *agentOnboardInput) (*agentOnboardOutput, error) {
+	agent, err := a.store.GenerateAgentToken(ctx, input.ID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to generate agent token")
+	}
+	return &agentOnboardOutput{Body: agent}, nil
+}
+
 // --- Registration ---
 
 func registerAgents(a *API, api huma.API) {
@@ -165,4 +181,13 @@ func registerAgents(a *API, api huma.API) {
 		Tags:        []string{"Agents"},
 		OperationID: "agent-usage",
 	}, a.agentUsage)
+
+	huma.Register(api, huma.Operation{
+		Method:      http.MethodPost,
+		Path:        "/api/v1/agents/{id}/onboard",
+		Summary:     "Onboard a new agent",
+		Description: "Generate and return a bearer token for a new agent. This token can be used for future API requests.",
+		Tags:        []string{"Agents"},
+		OperationID: "onboard-agent",
+	}, a.agentOnboard)
 }

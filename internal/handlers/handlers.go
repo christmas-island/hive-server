@@ -33,6 +33,7 @@ type Store interface {
 	Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus, activity, hiveLocalVersion, hivePluginVersion string) (*model.Agent, error)
 	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
+	GenerateAgentToken(ctx context.Context, id string) (*model.Agent, error)
 	// Claims
 	CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, error)
 	EnqueueClaim(ctx context.Context, w *model.ClaimWaiter) (*model.ClaimWaiter, int, error)
@@ -109,27 +110,46 @@ const ctxKeySession ctxKey = "session_context"
 
 // authMiddleware validates the Bearer token and extracts X-Agent-ID and session
 // context headers into context.
+// Supports both global HIVE_TOKEN and per-agent tokens.
 func (a *API) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// If no token configured, skip auth (local dev).
-		if a.token != "" {
-			auth := r.Header.Get("Authorization")
-			if auth != "Bearer "+a.token {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"error":   "unauthorized",
-					"message": "invalid or missing bearer token",
-				})
-				return
+		// Get the bearer token from Authorization header
+		authHeader := r.Header.Get("Authorization")
+		bearerToken := ""
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			bearerToken = authHeader[7:]
+		}
+
+		agentID := r.Header.Get("X-Agent-ID")
+
+		// Check auth: either global token or per-agent token
+		authValid := false
+		if a.token != "" && bearerToken == a.token {
+			// Global token matches (backward compatibility)
+			authValid = true
+		} else if bearerToken != "" && agentID != "" {
+			// Try to validate per-agent token
+			agent, err := a.store.GetAgent(r.Context(), agentID)
+			if err == nil && agent.Token != "" && bearerToken == agent.Token {
+				authValid = true
 			}
 		}
 
+		// If auth is required and not valid, reject
+		if (a.token != "" || bearerToken != "") && !authValid {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "unauthorized",
+				"message": "invalid or missing bearer token",
+			})
+			return
+		}
+
 		// Inject agent ID into context for downstream use.
-		aid := r.Header.Get("X-Agent-ID")
 		ctx := r.Context()
-		if aid != "" {
-			ctx = context.WithValue(ctx, ctxKeyAgentID, aid)
+		if agentID != "" {
+			ctx = context.WithValue(ctx, ctxKeyAgentID, agentID)
 		}
 
 		// Extract session context headers.
