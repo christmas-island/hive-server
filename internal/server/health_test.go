@@ -77,6 +77,67 @@ func TestHealthzHandler_Healthy(t *testing.T) {
 	}
 }
 
+func TestHandleVersion(t *testing.T) {
+	// Set known version info for the test.
+	SetVersionInfo("1.2.3", "abc1234", "2026-03-11")
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	w := httptest.NewRecorder()
+
+	handleVersion(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+	var vi VersionInfo
+	if err := json.NewDecoder(w.Body).Decode(&vi); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if vi.Version != "1.2.3" {
+		t.Errorf("Version = %q, want 1.2.3", vi.Version)
+	}
+	if vi.Commit != "abc1234" {
+		t.Errorf("Commit = %q, want abc1234", vi.Commit)
+	}
+	if vi.Date != "2026-03-11" {
+		t.Errorf("Date = %q, want 2026-03-11", vi.Date)
+	}
+}
+
+func TestSetVersionInfo(t *testing.T) {
+	SetVersionInfo("v2.0.0", "deadbeef", "2026-01-01")
+	vi := GetVersionInfo()
+
+	if vi.Version != "v2.0.0" {
+		t.Errorf("Version = %q, want v2.0.0", vi.Version)
+	}
+	if vi.Commit != "deadbeef" {
+		t.Errorf("Commit = %q, want deadbeef", vi.Commit)
+	}
+	if vi.Date != "2026-01-01" {
+		t.Errorf("Date = %q, want 2026-01-01", vi.Date)
+	}
+}
+
+func TestGetVersionInfo_Defaults(t *testing.T) {
+	// Reset to defaults.
+	SetVersionInfo("dev", "none", "unknown")
+	vi := GetVersionInfo()
+
+	if vi.Version != "dev" {
+		t.Errorf("Version = %q, want dev", vi.Version)
+	}
+	if vi.Commit != "none" {
+		t.Errorf("Commit = %q, want none", vi.Commit)
+	}
+	if vi.Date != "unknown" {
+		t.Errorf("Date = %q, want unknown", vi.Date)
+	}
+}
+
 func TestHealthzHandler_Unhealthy(t *testing.T) {
 	p := &mockPinger{err: errors.New("connection refused")}
 	h := healthzHandler(p)
