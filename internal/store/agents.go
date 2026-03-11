@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 )
 
 // offlineThreshold is the duration after which an agent is considered offline.
@@ -16,6 +17,7 @@ const offlineThreshold = 5 * time.Minute
 // Heartbeat upserts an agent record, updating its last_heartbeat and status.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus) (*model.Agent, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	now := time.Now().UTC()
 	capsJSON, err := json.Marshal(capabilities)
 	if err != nil {
@@ -46,6 +48,7 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 
 // GetAgent retrieves a single agent by ID, applying the offline threshold.
 func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, status, capabilities, last_heartbeat, registered_at FROM agents WHERE id = $1`,
 		id,

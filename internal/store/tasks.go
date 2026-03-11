@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 	"github.com/google/uuid"
 )
 
@@ -17,6 +18,7 @@ import (
 // CreateTask inserts a new task and returns it.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) CreateTask(ctx context.Context, t *model.Task) (*model.Task, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	t.ID = uuid.New().String()
 	t.Status = model.TaskStatusOpen
 	now := time.Now().UTC()
@@ -55,6 +57,7 @@ func (s *Store) CreateTask(ctx context.Context, t *model.Task) (*model.Task, err
 
 // GetTask retrieves a task by ID, including its notes.
 func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
          FROM tasks WHERE id = $1`,
@@ -72,6 +75,7 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 
 // ListTasks returns tasks matching the filter.
 func (s *Store) ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Task, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	q := `SELECT id, title, description, status, creator, assignee, priority, tags, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, created_at, updated_at
           FROM tasks WHERE 1=1`
 	args := []any{}
@@ -138,6 +142,7 @@ func (s *Store) ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Tas
 // UpdateTask applies a TaskUpdate to a task, enforcing state machine rules.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) UpdateTask(ctx context.Context, id string, upd model.TaskUpdate) (*model.Task, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
 		// Fetch current task.
 		var t model.Task
@@ -204,6 +209,7 @@ func (s *Store) UpdateTask(ctx context.Context, id string, upd model.TaskUpdate)
 // DeleteTask removes a task (and its notes via cascade) by ID.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
 func (s *Store) DeleteTask(ctx context.Context, id string) error {
+	defer timing.TrackDB(ctx, time.Now())
 	return s.RetryTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM tasks WHERE id = $1`, id)
 		if err != nil {

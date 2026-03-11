@@ -12,11 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 )
 
 // CreateClaim inserts a new claim and returns it.
 // Returns model.ErrConflict if an active claim already exists on the same resource.
 func (s *Store) CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	c.ID = uuid.New().String()
 	c.Status = model.ClaimStatusActive
 	now := time.Now().UTC()
@@ -57,6 +59,7 @@ func (s *Store) CreateClaim(ctx context.Context, c *model.Claim) (*model.Claim, 
 
 // GetClaim retrieves a claim by ID.
 func (s *Store) GetClaim(ctx context.Context, id string) (*model.Claim, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
          FROM claims WHERE id = $1`,
@@ -67,6 +70,7 @@ func (s *Store) GetClaim(ctx context.Context, id string) (*model.Claim, error) {
 
 // ListClaims returns claims matching the filter.
 func (s *Store) ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.Claim, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	q := `SELECT id, type, resource, agent_id, status, metadata, session_key, session_id, channel, sender_id, sender_is_owner, sandboxed, claimed_at, expires_at, updated_at
           FROM claims WHERE 1=1`
 	args := []any{}
@@ -133,6 +137,7 @@ func (s *Store) ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.C
 // next waiter in the queue (if any) to a new active claim on the same resource.
 // Returns a ClaimReleaseResult with the released claim and the next holder (if any).
 func (s *Store) ReleaseClaim(ctx context.Context, id string) (*model.ClaimReleaseResult, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	var released *model.Claim
 	var next *model.ClaimWaiter
 
@@ -213,6 +218,7 @@ func scanClaimRowTx(row *sql.Row) (*model.Claim, error) {
 // RenewClaim extends the expiry of an active claim.
 // Returns model.ErrNotFound if the claim does not exist or is not active.
 func (s *Store) RenewClaim(ctx context.Context, id string, expiresAt time.Time) (*model.Claim, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	err := s.RetryTx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC()
 		res, err := tx.ExecContext(ctx,

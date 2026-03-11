@@ -10,11 +10,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/christmas-island/hive-server/internal/model"
+	"github.com/christmas-island/hive-server/internal/timing"
 )
 
 // CreateCapturedSession persists a new captured session and returns it with
 // hive-assigned ID and created_at.
 func (s *Store) CreateCapturedSession(ctx context.Context, cs *model.CapturedSession) (*model.CapturedSession, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	cs.ID = uuid.New().String()
 	now := time.Now().UTC()
 	cs.CreatedAt = now
@@ -77,6 +79,7 @@ func (s *Store) CreateCapturedSession(ctx context.Context, cs *model.CapturedSes
 
 // GetCapturedSession retrieves a single captured session by ID.
 func (s *Store) GetCapturedSession(ctx context.Context, id string) (*model.CapturedSession, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, agent_id, session_key, session_id, channel, sender_id,
 		        model, provider, started_at, finished_at,
@@ -94,6 +97,7 @@ func (s *Store) GetCapturedSession(ctx context.Context, id string) (*model.Captu
 
 // ListCapturedSessions returns sessions matching the given filter.
 func (s *Store) ListCapturedSessions(ctx context.Context, f model.SessionFilter) ([]*model.CapturedSession, error) {
+	defer timing.TrackDB(ctx, time.Now())
 	limit := f.Limit
 	if limit <= 0 || limit > 100 {
 		limit = 50
