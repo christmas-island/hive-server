@@ -14,7 +14,7 @@ func TestHeartbeat_Register(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	agent, err := s.Heartbeat(ctx, "agent-1", []string{"memory", "tasks"}, model.AgentStatusOnline, "")
+	agent, err := s.Heartbeat(ctx, "agent-1", []string{"memory", "tasks"}, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -39,14 +39,14 @@ func TestHeartbeat_Update(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	a1, err := s.Heartbeat(ctx, "agent-upd", []string{"a"}, model.AgentStatusOnline, "")
+	a1, err := s.Heartbeat(ctx, "agent-upd", []string{"a"}, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("first heartbeat: %v", err)
 	}
 
 	time.Sleep(2 * time.Millisecond)
 
-	a2, err := s.Heartbeat(ctx, "agent-upd", []string{"a", "b"}, model.AgentStatusIdle, "")
+	a2, err := s.Heartbeat(ctx, "agent-upd", []string{"a", "b"}, model.AgentStatusIdle, "", "")
 	if err != nil {
 		t.Fatalf("second heartbeat: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestHeartbeat_Update(t *testing.T) {
 
 func TestHeartbeat_NilCapabilities(t *testing.T) {
 	s := newTestStore(t)
-	agent, err := s.Heartbeat(context.Background(), "nocaps", nil, model.AgentStatusOnline, "")
+	agent, err := s.Heartbeat(context.Background(), "nocaps", nil, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestGetAgent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.Heartbeat(ctx, "get-agent", []string{}, model.AgentStatusOnline, "")
+	_, err := s.Heartbeat(ctx, "get-agent", []string{}, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestListAgents(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{"a1", "a2", "a3"} {
-		_, err := s.Heartbeat(ctx, id, nil, model.AgentStatusOnline, "")
+		_, err := s.Heartbeat(ctx, id, nil, model.AgentStatusOnline, "", "")
 		if err != nil {
 			t.Fatalf("Heartbeat %q: %v", id, err)
 		}
@@ -138,7 +138,7 @@ func TestAgentOfflineThreshold(t *testing.T) {
 	ctx := context.Background()
 
 	// Register agent with a stale heartbeat by directly manipulating the DB.
-	_, err := s.Heartbeat(ctx, "stale-agent", nil, model.AgentStatusOnline, "")
+	_, err := s.Heartbeat(ctx, "stale-agent", nil, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestHeartbeat_ReportsHiveLocalVersion(t *testing.T) {
 	ctx := context.Background()
 
 	// First heartbeat without version.
-	a1, err := s.Heartbeat(ctx, "ver-agent", []string{"mcp"}, model.AgentStatusOnline, "")
+	a1, err := s.Heartbeat(ctx, "ver-agent", []string{"mcp"}, model.AgentStatusOnline, "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestHeartbeat_ReportsHiveLocalVersion(t *testing.T) {
 	}
 
 	// Update heartbeat with version.
-	a2, err := s.Heartbeat(ctx, "ver-agent", []string{"mcp"}, model.AgentStatusOnline, "2.0.0")
+	a2, err := s.Heartbeat(ctx, "ver-agent", []string{"mcp"}, model.AgentStatusOnline, "2.0.0", "")
 	if err != nil {
 		t.Fatalf("Heartbeat with version: %v", err)
 	}
@@ -207,5 +207,40 @@ func TestHeartbeat_ReportsHiveLocalVersion(t *testing.T) {
 	}
 	if !found {
 		t.Error("ver-agent not found in ListAgents")
+	}
+}
+
+func TestHeartbeat_HivePluginVersion(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Initial heartbeat with no plugin version
+	a1, err := s.Heartbeat(ctx, "plugin-agent", []string{"mcp"}, model.AgentStatusOnline, "", "")
+	if err != nil {
+		t.Fatalf("Heartbeat: %v", err)
+	}
+	if a1.HivePluginVersion != "" {
+		t.Errorf("HivePluginVersion = %q, want empty", a1.HivePluginVersion)
+	}
+
+	// Update with plugin version
+	a2, err := s.Heartbeat(ctx, "plugin-agent", []string{"mcp"}, model.AgentStatusOnline, "", "1.5.0")
+	if err != nil {
+		t.Fatalf("Heartbeat with plugin version: %v", err)
+	}
+	if a2.HivePluginVersion != "1.5.0" {
+		t.Errorf("HivePluginVersion = %q, want 1.5.0", a2.HivePluginVersion)
+	}
+
+	// Update with both local and plugin versions
+	a3, err := s.Heartbeat(ctx, "plugin-agent", []string{"mcp"}, model.AgentStatusOnline, "2.1.0", "1.6.0")
+	if err != nil {
+		t.Fatalf("Heartbeat with both versions: %v", err)
+	}
+	if a3.HiveLocalVersion != "2.1.0" {
+		t.Errorf("HiveLocalVersion = %q, want 2.1.0", a3.HiveLocalVersion)
+	}
+	if a3.HivePluginVersion != "1.6.0" {
+		t.Errorf("HivePluginVersion = %q, want 1.6.0", a3.HivePluginVersion)
 	}
 }
