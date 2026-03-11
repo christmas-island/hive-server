@@ -18,6 +18,7 @@ type agentHeartbeatInput struct {
 	Body struct {
 		Capabilities      []string `json:"capabilities,omitempty" doc:"Agent capability list"`
 		Status            string   `json:"status,omitempty" doc:"Agent status: online or idle (defaults to online)"`
+		Activity          string   `json:"activity,omitempty" doc:"Free-text description of current work (e.g. 'reviewing PR #42')"`
 		HiveLocalVersion  string   `json:"hive_local_version,omitempty" doc:"Semver string of the hive-local binary (e.g. '2.0.0')"`
 		HivePluginVersion string   `json:"hive_plugin_version,omitempty" doc:"Semver string of the hive plugin (e.g. '1.5.0')"`
 	}
@@ -67,7 +68,7 @@ func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*
 		status = model.AgentStatusOnline
 	}
 
-	agent, err := a.store.Heartbeat(ctx, input.ID, input.Body.Capabilities, status, input.Body.HiveLocalVersion, input.Body.HivePluginVersion)
+	agent, err := a.store.Heartbeat(ctx, input.ID, input.Body.Capabilities, status, input.Body.Activity, input.Body.HiveLocalVersion, input.Body.HivePluginVersion)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to record heartbeat")
 	}
@@ -75,7 +76,7 @@ func (a *API) agentHeartbeat(ctx context.Context, input *agentHeartbeatInput) (*
 	// Fire-and-forget relay to only-claws.
 	if a.relay != nil {
 		go func() {
-			_ = a.relay.UpdateStatus(context.Background(), input.ID, string(status), "")
+			_ = a.relay.UpdateStatus(context.Background(), input.ID, string(status), input.Body.Activity)
 		}()
 	}
 

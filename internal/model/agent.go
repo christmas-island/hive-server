@@ -16,6 +16,7 @@ type Agent struct {
 	ID                string      `json:"id"`
 	Name              string      `json:"name"`
 	Status            AgentStatus `json:"status"`
+	Activity          string      `json:"activity,omitempty"`            // free-text current work description
 	Capabilities      []string    `json:"capabilities"`
 	LastHeartbeat     time.Time   `json:"last_heartbeat"`
 	RegisteredAt      time.Time   `json:"registered_at"`

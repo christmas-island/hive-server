@@ -16,7 +16,7 @@ const offlineThreshold = 5 * time.Minute
 
 // Heartbeat upserts an agent record, updating its last_heartbeat and status.
 // Uses RetryTx to handle CockroachDB serialization conflicts.
-func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus, hiveLocalVersion, hivePluginVersion string) (*model.Agent, error) {
+func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string, status model.AgentStatus, activity, hiveLocalVersion, hivePluginVersion string) (*model.Agent, error) {
 	defer timing.TrackDB(ctx, time.Now())
 	now := time.Now().UTC()
 	capsJSON, err := json.Marshal(capabilities)
@@ -30,15 +30,16 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 	err = s.RetryTx(ctx, func(tx *sql.Tx) error {
 		// Upsert: insert or update, preserving registered_at on conflict.
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO agents (id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			INSERT INTO agents (id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (id) DO UPDATE SET
 				status              = EXCLUDED.status,
+				activity            = EXCLUDED.activity,
 				capabilities        = EXCLUDED.capabilities,
 				last_heartbeat      = EXCLUDED.last_heartbeat,
 				hive_local_version  = EXCLUDED.hive_local_version,
 				hive_plugin_version = EXCLUDED.hive_plugin_version
-		`, id, id, string(status), string(capsJSON), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), hiveLocalVersion, hivePluginVersion)
+		`, id, id, string(status), activity, string(capsJSON), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), hiveLocalVersion, hivePluginVersion)
 		return err
 	})
 	if err != nil {
@@ -52,7 +53,7 @@ func (s *Store) Heartbeat(ctx context.Context, id string, capabilities []string,
 func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
 	defer timing.TrackDB(ctx, time.Now())
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version FROM agents WHERE id = $1`,
+		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version FROM agents WHERE id = $1`,
 		id,
 	)
 	return scanAgentRow(row)
@@ -62,7 +63,7 @@ func (s *Store) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
 func (s *Store) ListAgents(ctx context.Context) ([]*model.Agent, error) {
 	defer timing.TrackDB(ctx, time.Now())
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, status, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version FROM agents ORDER BY id ASC`,
+		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version FROM agents ORDER BY id ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list agents: %w", err)
