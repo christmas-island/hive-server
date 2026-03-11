@@ -67,7 +67,7 @@ func newTestStore(t *testing.T) *store.Store {
 func cleanTestDB(t *testing.T, s *store.Store) {
 	t.Helper()
 	db := s.DB()
-	for _, tbl := range []string{"task_notes", "tasks", "memory", "claims", "discovery_channels", "discovery_roles", "agents"} {
+	for _, tbl := range []string{"task_notes", "tasks", "memory", "claim_queue", "claims", "discovery_channels", "discovery_roles", "agents"} {
 		if _, err := db.Exec("DELETE FROM " + tbl); err != nil {
 			t.Logf("cleanup %s: %v", tbl, err)
 		}

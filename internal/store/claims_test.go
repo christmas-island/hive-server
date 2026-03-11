@@ -4,6 +4,7 @@ package store_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -107,12 +108,21 @@ func TestReleaseClaim(t *testing.T) {
 	ctx := context.Background()
 
 	claim := makeClaim(s, t, "release-me#1")
-	released, err := s.ReleaseClaim(ctx, claim.ID)
+	result, err := s.ReleaseClaim(ctx, claim.ID)
 	if err != nil {
 		t.Fatalf("ReleaseClaim: %v", err)
 	}
-	if released.Status != model.ClaimStatusReleased {
-		t.Errorf("Status = %q, want released", released.Status)
+	if !result.Released {
+		t.Error("released = false, want true")
+	}
+	if result.Claim == nil {
+		t.Fatal("result.Claim is nil")
+	}
+	if result.Claim.Status != model.ClaimStatusReleased {
+		t.Errorf("Status = %q, want released", result.Claim.Status)
+	}
+	if result.Next != nil {
+		t.Errorf("expected no next waiter (empty queue), got %+v", result.Next)
 	}
 }
 
@@ -241,5 +251,165 @@ func TestCreateClaim_ConflictOnActiveResource(t *testing.T) {
 	}
 	if c.Status != model.ClaimStatusActive {
 		t.Errorf("Status = %q, want active", c.Status)
+	}
+}
+
+// --- Queue integration tests ---
+
+func TestEnqueueClaim(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	w := &model.ClaimWaiter{
+		Resource:     "conch#hive",
+		AgentID:      "waiter-agent",
+		Type:         model.ClaimTypeConch,
+		ExpiresInSec: 3600,
+	}
+	result, position, err := s.EnqueueClaim(ctx, w)
+	if err != nil {
+		t.Fatalf("EnqueueClaim: %v", err)
+	}
+	if result.ID == "" {
+		t.Error("ID is empty")
+	}
+	if position < 1 {
+		t.Errorf("position = %d, want >= 1", position)
+	}
+}
+
+func TestReleaseClaim_PromotesNextWaiter(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Holder claims the resource.
+	holder, err := s.CreateClaim(ctx, &model.Claim{
+		Type:      model.ClaimTypeConch,
+		Resource:  "conch#onlyclaws",
+		AgentID:   "holder-agent",
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("CreateClaim: %v", err)
+	}
+
+	// Second agent queues.
+	_, _, err = s.EnqueueClaim(ctx, &model.ClaimWaiter{
+		Resource:     "conch#onlyclaws",
+		AgentID:      "next-agent",
+		Type:         model.ClaimTypeConch,
+		ExpiresInSec: 3600,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueClaim: %v", err)
+	}
+
+	// Holder releases — next waiter should be promoted.
+	result, err := s.ReleaseClaim(ctx, holder.ID)
+	if err != nil {
+		t.Fatalf("ReleaseClaim: %v", err)
+	}
+	if !result.Released {
+		t.Error("released = false")
+	}
+	if result.Next == nil {
+		t.Fatal("expected next waiter, got nil")
+	}
+	if result.Next.AgentID != "next-agent" {
+		t.Errorf("next.AgentID = %q, want next-agent", result.Next.AgentID)
+	}
+
+	// The promoted waiter should now be the active holder.
+	active, err := s.ListClaims(ctx, model.ClaimFilter{Resource: "conch#onlyclaws", Status: "active"})
+	if err != nil {
+		t.Fatalf("ListClaims: %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active claim, got %d", len(active))
+	}
+	if active[0].AgentID != "next-agent" {
+		t.Errorf("promoted agent = %q, want next-agent", active[0].AgentID)
+	}
+}
+
+func TestQueueDepth(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	resource := "conch#depth-test"
+	depth, err := s.QueueDepth(ctx, resource)
+	if err != nil {
+		t.Fatalf("QueueDepth: %v", err)
+	}
+	if depth != 0 {
+		t.Errorf("initial depth = %d, want 0", depth)
+	}
+
+	for i := 0; i < 3; i++ {
+		_, _, err := s.EnqueueClaim(ctx, &model.ClaimWaiter{
+			Resource:     resource,
+			AgentID:      fmt.Sprintf("agent-%d", i),
+			Type:         model.ClaimTypeConch,
+			ExpiresInSec: 3600,
+		})
+		if err != nil {
+			t.Fatalf("EnqueueClaim: %v", err)
+		}
+	}
+
+	depth, err = s.QueueDepth(ctx, resource)
+	if err != nil {
+		t.Fatalf("QueueDepth: %v", err)
+	}
+	if depth != 3 {
+		t.Errorf("depth = %d, want 3", depth)
+	}
+}
+
+func TestExpireOldClaims_PromotesWaiter(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Create a claim that expires immediately.
+	_, err := s.CreateClaim(ctx, &model.Claim{
+		Type:      model.ClaimTypeConch,
+		Resource:  "conch#expire-promote",
+		AgentID:   "expiring-agent",
+		ExpiresAt: time.Now().UTC().Add(-time.Second), // already expired
+	})
+	if err != nil {
+		t.Fatalf("CreateClaim: %v", err)
+	}
+
+	// Enqueue a waiter.
+	_, _, err = s.EnqueueClaim(ctx, &model.ClaimWaiter{
+		Resource:     "conch#expire-promote",
+		AgentID:      "promoted-agent",
+		Type:         model.ClaimTypeConch,
+		ExpiresInSec: 3600,
+	})
+	if err != nil {
+		t.Fatalf("EnqueueClaim: %v", err)
+	}
+
+	// Expire claims — should promote the waiter.
+	count, err := s.ExpireOldClaims(ctx)
+	if err != nil {
+		t.Fatalf("ExpireOldClaims: %v", err)
+	}
+	if count < 1 {
+		t.Errorf("expired count = %d, want >= 1", count)
+	}
+
+	// The promoted waiter should now be the active holder.
+	active, err := s.ListClaims(ctx, model.ClaimFilter{Resource: "conch#expire-promote", Status: "active"})
+	if err != nil {
+		t.Fatalf("ListClaims: %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("expected 1 active claim, got %d", len(active))
+	}
+	if active[0].AgentID != "promoted-agent" {
+		t.Errorf("promoted agent = %q, want promoted-agent", active[0].AgentID)
 	}
 }
