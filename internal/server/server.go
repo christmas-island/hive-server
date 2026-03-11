@@ -56,6 +56,12 @@ func runClaimExpiry(ctx context.Context, ce claimExpirer) {
 	}
 }
 
+// logVersionInfo logs the build-time version metadata at startup.
+func logVersionInfo() {
+	vi := GetVersionInfo()
+	log.Info(fmt.Sprintf("hive-server version=%s commit=%s date=%s", vi.Version, vi.Commit, vi.Date))
+}
+
 // Run starts the HTTP server and blocks until the context is cancelled.
 // It handles store initialization, server lifecycle, and graceful shutdown.
 func (s *Server) Run(ctx context.Context) error {
@@ -106,8 +112,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}()
 
-	vi := GetVersionInfo()
-	log.Info(fmt.Sprintf("hive-server version=%s commit=%s date=%s", vi.Version, vi.Commit, vi.Date))
+	logVersionInfo()
 	log.Info("HTTP server starting on ", s.config.BindAddr)
 	if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("listen: %w", err)
