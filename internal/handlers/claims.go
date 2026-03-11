@@ -45,12 +45,14 @@ type claimListOutput struct {
 }
 
 type claimReleaseInput struct {
-	ID string `path:"id" doc:"Claim ID"`
+	XAgentID string `header:"X-Agent-ID" doc:"Calling agent identifier"`
+	ID       string `path:"id" doc:"Claim ID"`
 }
 
 type claimRenewInput struct {
-	ID   string `path:"id" doc:"Claim ID"`
-	Body struct {
+	XAgentID string `header:"X-Agent-ID" doc:"Calling agent identifier"`
+	ID       string `path:"id" doc:"Claim ID"`
+	Body     struct {
 		ExpiresIn string `json:"expires_in,omitempty" doc:"Duration (e.g. 1h, 30m). Default 1h."`
 	}
 }
@@ -119,6 +121,20 @@ func (a *API) claimList(ctx context.Context, input *claimListInput) (*claimListO
 }
 
 func (a *API) claimRelease(ctx context.Context, input *claimReleaseInput) (*claimOutput, error) {
+	// Ownership check: only the claim owner can release it.
+	if input.XAgentID != "" {
+		existing, err := a.store.GetClaim(ctx, input.ID)
+		if errors.Is(err, model.ErrNotFound) {
+			return nil, huma.Error404NotFound("claim not found")
+		}
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to get claim")
+		}
+		if existing.AgentID != input.XAgentID {
+			return nil, huma.Error403Forbidden("only the claim owner can release this claim")
+		}
+	}
+
 	c, err := a.store.ReleaseClaim(ctx, input.ID)
 	if errors.Is(err, model.ErrNotFound) {
 		return nil, huma.Error404NotFound("claim not found")
@@ -130,6 +146,20 @@ func (a *API) claimRelease(ctx context.Context, input *claimReleaseInput) (*clai
 }
 
 func (a *API) claimRenew(ctx context.Context, input *claimRenewInput) (*claimOutput, error) {
+	// Ownership check: only the claim owner can renew it.
+	if input.XAgentID != "" {
+		existing, err := a.store.GetClaim(ctx, input.ID)
+		if errors.Is(err, model.ErrNotFound) {
+			return nil, huma.Error404NotFound("claim not found")
+		}
+		if err != nil {
+			return nil, huma.Error500InternalServerError("failed to get claim")
+		}
+		if existing.AgentID != input.XAgentID {
+			return nil, huma.Error403Forbidden("only the claim owner can renew this claim")
+		}
+	}
+
 	dur := time.Hour
 	if input.Body.ExpiresIn != "" {
 		parsed, err := time.ParseDuration(input.Body.ExpiresIn)
