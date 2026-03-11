@@ -26,6 +26,11 @@ builds:
       - arm64
     main: ./cmd/hive-server
     binary: hive-server
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
 
 archives:
   - formats:

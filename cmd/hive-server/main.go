@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/christmas-island/hive-server/internal/log"
+	"github.com/christmas-island/hive-server/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -26,13 +27,17 @@ func main() {
 // App is the main CLI entrypoint. It returns a [cobra.Command] instance.
 func App() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "hive-server",
-		Short: "Cross-agent memory and task coordination API server.",
+		Use:     "hive-server",
+		Short:   "Cross-agent memory and task coordination API server.",
+		Version: version,
 		Run: func(cmd *cobra.Command, args []string) {
 			defer log.To(cmd.OutOrStdout())()
 			log.Info("Use a subcommand. See --help for details.")
 		},
 	}
+
+	// Make version info available to subcommands via server.Config.
+	server.SetVersionInfo(version, commit, date)
 
 	cmd.AddCommand(Serve())
 	return cmd
