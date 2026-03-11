@@ -11,13 +11,11 @@ plugins:
   - - "@semantic-release/release-notes-generator"
     - preset: conventionalcommits
   - - "@semantic-release/git"
-  - - "@semantic-release/github"
-    # Defaults to disable unnededed events which can trigger GH ratelimits
-    - failComment: false
-      failTitle: false
-      labels: false
-      releasedLabels: false
-      successComment: false
+  # NOTE: @semantic-release/github intentionally removed.
+  # goreleaser in the Publish job creates the GitHub Release and uploads
+  # binary assets.  Having both semantic-release AND goreleaser create a
+  # release causes a 422 "Cannot upload assets to an immutable release"
+  # error because the release is already finalized when goreleaser runs.
   - - "semantic-release-major-tag"
 
 generateNotes:
