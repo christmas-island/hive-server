@@ -474,3 +474,51 @@ func TestRenewClaim_Forbidden(t *testing.T) {
 		t.Errorf("status = %d, want 403", resp.StatusCode)
 	}
 }
+
+func TestReleaseClaim_StoreError_WithOwnership(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+
+	// Seed a claim owned by testAgent so ownership check passes, then fail ReleaseClaim.
+	ms.mu.Lock()
+	ms.claims["claim-store-err"] = &model.Claim{
+		ID:        "claim-store-err",
+		Type:      model.ClaimTypeConch,
+		Resource:  "conch#store-err",
+		AgentID:   testAgent,
+		Status:    model.ClaimStatusActive,
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}
+	ms.mu.Unlock()
+
+	ms.injectErr("ReleaseClaim", errTest)
+
+	resp := request(t, srv, http.MethodDelete, "/api/v1/claims/claim-store-err", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestReleaseClaim_GetClaimError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetClaim", errTest)
+
+	resp := request(t, srv, http.MethodDelete, "/api/v1/claims/some-id", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}
+
+func TestRenewClaim_GetClaimError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetClaim", errTest)
+
+	resp := request(t, srv, http.MethodPatch, "/api/v1/claims/some-id", map[string]any{
+		"expires_in": "1h",
+	}, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+}

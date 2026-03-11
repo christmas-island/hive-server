@@ -8,6 +8,7 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/christmas-island/hive-server/internal/model"
 )
@@ -881,5 +882,121 @@ func TestReleaseClaim_PopWaiterScanError(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestExpireOldClaims_QueryExpiredResourcesError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	// Sweep — empty.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)).WillReturnRows(sqlmock.NewRows(waiterSweepCols))
+	// Distinct resources — error.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT DISTINCT resource FROM claims
+		 WHERE status = $1 AND expires_at < $2`,
+	)).WillReturnError(errors.New("query failed"))
+	mock.ExpectRollback()
+
+	_, err := s.ExpireOldClaims(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestExpireOldClaims_ResourceScanError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)).WillReturnRows(sqlmock.NewRows(waiterSweepCols))
+	// Return a resource row with wrong type to trigger scan error.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT DISTINCT resource FROM claims
+		 WHERE status = $1 AND expires_at < $2`,
+	)).WillReturnRows(
+		sqlmock.NewRows([]string{"resource", "extra"}).AddRow("r1", "bad"),
+	)
+	mock.ExpectRollback()
+
+	_, err := s.ExpireOldClaims(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestReleaseClaim_NotFoundAfterUpdate(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	// Release update succeeds.
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
+	// But fetching the claim after update returns nothing.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, type, resource, agent_id, status, metadata,
+			        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			        claimed_at, expires_at, updated_at
+			 FROM claims WHERE id = $1`,
+	)).WithArgs("gone-claim").WillReturnRows(sqlmock.NewRows(claimColumns))
+	mock.ExpectRollback()
+
+	_, err := s.ReleaseClaim(context.Background(), "gone-claim")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestReleaseClaim_FetchError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(
+		`UPDATE claims SET status = $1, updated_at = $2 WHERE id = $3`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
+	// Fetch after release fails.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, type, resource, agent_id, status, metadata,
+			        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			        claimed_at, expires_at, updated_at
+			 FROM claims WHERE id = $1`,
+	)).WithArgs("err-claim").WillReturnError(errors.New("db error"))
+	mock.ExpectRollback()
+
+	_, err := s.ReleaseClaim(context.Background(), "err-claim")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestCreateClaim_UniqueViolation(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	now := time.Now().UTC()
+
+	// Simulate unique constraint violation on INSERT → ErrConflict.
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(
+		`INSERT INTO claims`,
+	)).WillReturnError(&pgconn.PgError{Code: "23505"})
+	mock.ExpectRollback()
+
+	_, err := s.CreateClaim(context.Background(), &model.Claim{
+		Type:      model.ClaimTypeIssue,
+		Resource:  "r1",
+		AgentID:   "agent2",
+		ExpiresAt: now.Add(time.Hour),
+	})
+	if !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
 	}
 }
