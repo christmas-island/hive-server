@@ -15,6 +15,9 @@ import (
 // claimColumns lists the columns returned by claim queries.
 var claimColumns = []string{"id", "type", "resource", "agent_id", "status", "metadata", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "claimed_at", "expires_at", "updated_at"}
 
+// waiterColumns lists the columns returned by claim_queue queries.
+var waiterColumns = []string{"id", "resource", "agent_id", "type", "metadata", "session_key", "session_id", "channel", "sender_id", "sender_is_owner", "sandboxed", "expires_in_sec", "queued_at"}
+
 // claimRow builds a sample claim row.
 func claimRow(now time.Time) *sqlmock.Rows {
 	return sqlmock.NewRows(claimColumns).AddRow(
@@ -514,14 +517,61 @@ func TestRenewClaim_ExecError(t *testing.T) {
 
 // --- ExpireOldClaims ---
 
+// waiterSweepCols are the columns returned by sweepExpiredWaiters.
+var waiterSweepCols = []string{"id", "expires_in_sec", "queued_at"}
+
 func TestExpireOldClaims_Success(t *testing.T) {
 	db, mock := newMockDB(t)
 	s := &Store{db: db}
 
+	now := time.Now().UTC()
+
 	mock.ExpectBegin()
+	// 1. sweepExpiredWaiters — no stale entries.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)).WillReturnRows(sqlmock.NewRows(waiterSweepCols))
+	// 2. Find expired resources.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT DISTINCT resource FROM claims
+		 WHERE status = $1 AND expires_at < $2`,
+	)).WillReturnRows(sqlmock.NewRows([]string{"resource"}).
+		AddRow("r1").AddRow("r2"),
+	)
+	// 3. Expire active claims.
 	mock.ExpectExec(regexp.QuoteMeta(
 		`UPDATE claims SET status = $1, updated_at = $2 WHERE status = $3 AND expires_at < $4`,
 	)).WillReturnResult(sqlmock.NewResult(0, 3))
+	// 4. PopNextWaiter for r1 — empty queue.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, resource, agent_id, type, metadata,
+		        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+		        expires_in_sec, queued_at
+		 FROM claim_queue WHERE resource = $1
+		 ORDER BY queued_at ASC LIMIT 1`,
+	)).WithArgs("r1").WillReturnRows(sqlmock.NewRows([]string{}))
+	// 5. PopNextWaiter for r2 — has a waiter.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, resource, agent_id, type, metadata,
+		        session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+		        expires_in_sec, queued_at
+		 FROM claim_queue WHERE resource = $1
+		 ORDER BY queued_at ASC LIMIT 1`,
+	)).WithArgs("r2").WillReturnRows(
+		sqlmock.NewRows(waiterColumns).AddRow(
+			"w1", "r2", "agent2", "conch", `{}`, "", "", "", "", false, false, 3600, now.Format(time.RFC3339Nano),
+		),
+	)
+	// Delete the popped waiter.
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM claim_queue WHERE id = $1`)).
+		WithArgs("w1").WillReturnResult(sqlmock.NewResult(0, 1))
+	// Promote waiter to active claim.
+	mock.ExpectExec(regexp.QuoteMeta(
+		`INSERT INTO claims (id, type, resource, agent_id, status, metadata,
+			 session_key, session_id, channel, sender_id, sender_is_owner, sandboxed,
+			 claimed_at, expires_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+	)).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
 	n, err := s.ExpireOldClaims(context.Background())
@@ -541,6 +591,16 @@ func TestExpireOldClaims_NoExpired(t *testing.T) {
 	s := &Store{db: db}
 
 	mock.ExpectBegin()
+	// 1. Sweep stale waiters — empty queue.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)).WillReturnRows(sqlmock.NewRows(waiterSweepCols))
+	// 2. No expired resources.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT DISTINCT resource FROM claims
+		 WHERE status = $1 AND expires_at < $2`,
+	)).WillReturnRows(sqlmock.NewRows([]string{"resource"}))
+	// 3. Expire update — 0 rows.
 	mock.ExpectExec(regexp.QuoteMeta(
 		`UPDATE claims SET status = $1, updated_at = $2 WHERE status = $3 AND expires_at < $4`,
 	)).WillReturnResult(sqlmock.NewResult(0, 0))
@@ -561,6 +621,16 @@ func TestExpireOldClaims_ExecError(t *testing.T) {
 
 	dbErr := errors.New("exec failed")
 	mock.ExpectBegin()
+	// Sweep — empty.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)).WillReturnRows(sqlmock.NewRows(waiterSweepCols))
+	// Distinct resources.
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT DISTINCT resource FROM claims
+		 WHERE status = $1 AND expires_at < $2`,
+	)).WillReturnRows(sqlmock.NewRows([]string{"resource"}))
+	// Expire update — error.
 	mock.ExpectExec(regexp.QuoteMeta(
 		`UPDATE claims SET status = $1, updated_at = $2 WHERE status = $3 AND expires_at < $4`,
 	)).WillReturnError(dbErr)

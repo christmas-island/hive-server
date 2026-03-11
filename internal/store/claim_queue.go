@@ -46,10 +46,12 @@ func (s *Store) EnqueueClaim(ctx context.Context, w *model.ClaimWaiter) (*model.
 			return fmt.Errorf("insert queue entry: %w", err)
 		}
 
-		// Compute 1-based position.
+		// Compute 1-based position inside the same transaction for a consistent
+		// snapshot. Count by id (stable) rather than by timestamp to avoid
+		// duplicate-position issues under concurrent inserts at the same ms.
 		row := tx.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM claim_queue WHERE resource = $1 AND queued_at <= $2`,
-			w.Resource, now.Format(time.RFC3339Nano),
+			`SELECT COUNT(*) FROM claim_queue WHERE resource = $1`,
+			w.Resource,
 		)
 		return row.Scan(&position)
 	})
@@ -85,6 +87,40 @@ func (s *Store) PopNextWaiter(ctx context.Context, tx *sql.Tx, resource string) 
 		return nil, fmt.Errorf("delete queue entry: %w", err)
 	}
 	return w, nil
+}
+
+// sweepExpiredWaiters deletes claim_queue entries whose TTL has elapsed.
+// Called inside the ExpireOldClaims transaction; errors are non-fatal.
+func sweepExpiredWaiters(ctx context.Context, tx *sql.Tx, now time.Time) error {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, expires_in_sec, queued_at FROM claim_queue`,
+	)
+	if err != nil {
+		return err
+	}
+	var staleIDs []string
+	for rows.Next() {
+		var id, queuedStr string
+		var expSec int
+		if err := rows.Scan(&id, &expSec, &queuedStr); err != nil {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339Nano, queuedStr)
+		if err != nil {
+			continue
+		}
+		if now.After(t.Add(time.Duration(expSec) * time.Second)) {
+			staleIDs = append(staleIDs, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range staleIDs {
+		tx.ExecContext(ctx, `DELETE FROM claim_queue WHERE id = $1`, id) //nolint:errcheck
+	}
+	return nil
 }
 
 // QueueDepth returns the number of agents waiting for a resource.
