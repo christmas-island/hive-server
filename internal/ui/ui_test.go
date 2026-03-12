@@ -114,14 +114,13 @@ func TestUI_StaticFiles(t *testing.T) {
 	router := handler.Routes()
 
 	// Test that static files are served
-	req := httptest.NewRequest(http.MethodGet, "/static/style.css", nil)
+	req := httptest.NewRequest(http.MethodGet, "/static/app.css", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	// Should return 200 if file exists, or 404 if it doesn't (both are valid responses)
-	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
-		t.Errorf("expected status 200 or 404, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200 for static file, got %d", w.Code)
 	}
 }
 

@@ -65,7 +65,7 @@ func (ui *UI) Routes() chi.Router {
 	r.Use(ui.authMiddleware)
 
 	// Static files
-	r.Handle("/static/*", http.StripPrefix("/ui/static/", http.FileServer(http.FS(staticFS))))
+	r.Handle("/static/*", http.FileServer(http.FS(staticFS)))
 
 	// UI pages
 	r.Get("/", ui.dashboard)
