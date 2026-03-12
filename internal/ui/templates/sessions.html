@@ -1,0 +1,119 @@
+{{template "layout.html" .}}
+
+{{define "content"}}
+<div class="mb-6">
+    <h2 class="text-2xl font-bold text-cyan-400 mb-2">Sessions</h2>
+    <p class="text-slate-400">Captured agent sessions and execution history</p>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <form method="GET" action="/ui/sessions" class="flex flex-wrap gap-4">
+        <div class="flex flex-col">
+            <label for="agent" class="text-sm font-medium text-slate-300 mb-1">Agent</label>
+            <input type="text" name="agent" id="agent" value="{{.Filter.AgentID}}" 
+                   placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="repo" class="text-sm font-medium text-slate-300 mb-1">Repository</label>
+            <input type="text" name="repo" id="repo" value="{{.Filter.Repo}}" 
+                   placeholder="Repo name" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="limit" class="text-sm font-medium text-slate-300 mb-1">Limit</label>
+            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}25{{end}}" 
+                   min="1" max="100" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded font-medium">
+                Filter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Agent</th>
+                <th>Model</th>
+                <th>Repository</th>
+                <th>Summary</th>
+                <th>Duration</th>
+                <th>Started</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Sessions}}
+            <tr>
+                <td class="font-mono text-sm">{{truncate .ID 12}}</td>
+                <td class="font-mono text-sm">{{.AgentID}}</td>
+                <td class="text-sm">
+                    {{if .Model}}
+                    <div class="text-slate-300">{{.Model}}</div>
+                    {{if .Provider}}
+                    <div class="text-xs text-slate-400">{{.Provider}}</div>
+                    {{end}}
+                    {{else}}
+                    <span class="text-slate-500 italic">—</span>
+                    {{end}}
+                </td>
+                <td class="font-mono text-sm max-w-xs">
+                    {{if .Repo}}
+                    {{truncate .Repo 25}}
+                    {{else}}
+                    <span class="text-slate-500 italic">—</span>
+                    {{end}}
+                </td>
+                <td class="max-w-md">
+                    {{if .Summary}}
+                    <div class="text-sm text-slate-300 truncate">{{truncate .Summary 60}}</div>
+                    {{else}}
+                    <span class="text-slate-500 italic text-sm">No summary</span>
+                    {{end}}
+                </td>
+                <td class="text-sm">
+                    {{if and .StartedAt .FinishedAt}}
+                    <!-- Calculate duration if both timestamps exist -->
+                    <span class="text-slate-300">Duration</span>
+                    {{else if .StartedAt}}
+                    <span class="text-yellow-400">Running...</span>
+                    {{else}}
+                    <span class="text-slate-500 italic">—</span>
+                    {{end}}
+                </td>
+                <td class="text-sm">
+                    {{if .StartedAt}}
+                    <div>{{timeAgo .StartedAt}}</div>
+                    <div class="text-xs text-slate-400">{{formatTime .StartedAt}}</div>
+                    {{else}}
+                    <span class="text-slate-500 italic">—</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="7" class="text-center text-slate-500 italic py-8">
+                    {{if or .Filter.AgentID .Filter.Repo}}
+                    No sessions match the current filters
+                    {{else}}
+                    No sessions found
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if .Sessions}}
+<div class="mt-6 text-sm text-slate-400">
+    Showing {{len .Sessions}} session(s)
+    {{if .Filter.Limit}}
+    (limited to {{.Filter.Limit}})
+    {{end}}
+</div>
+{{end}}
+{{end}}

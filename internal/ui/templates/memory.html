@@ -1,0 +1,115 @@
+{{template "layout.html" .}}
+
+{{define "content"}}
+<div class="mb-6">
+    <h2 class="text-2xl font-bold text-cyan-400 mb-2">Memory</h2>
+    <p class="text-slate-400">Shared memory entries and agent knowledge</p>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <form method="GET" action="/ui/memory" class="flex flex-wrap gap-4">
+        <div class="flex flex-col">
+            <label for="agent" class="text-sm font-medium text-slate-300 mb-1">Agent</label>
+            <input type="text" name="agent" id="agent" value="{{.Filter.Agent}}" 
+                   placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="prefix" class="text-sm font-medium text-slate-300 mb-1">Key Prefix</label>
+            <input type="text" name="prefix" id="prefix" value="{{.Filter.Prefix}}" 
+                   placeholder="e.g., /tasks/" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="tag" class="text-sm font-medium text-slate-300 mb-1">Tag</label>
+            <input type="text" name="tag" id="tag" value="{{.Filter.Tag}}" 
+                   placeholder="Tag name" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="limit" class="text-sm font-medium text-slate-300 mb-1">Limit</label>
+            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}50{{end}}" 
+                   min="1" max="500" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded font-medium">
+                Filter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Key</th>
+                <th>Agent</th>
+                <th>Version</th>
+                <th>Tags</th>
+                <th>Value</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Memory}}
+            <tr>
+                <td class="max-w-xs font-mono text-sm">
+                    <div class="font-medium text-slate-200 truncate">{{truncate .Key 40}}</div>
+                </td>
+                <td class="font-mono text-sm">{{.AgentID}}</td>
+                <td class="text-center">
+                    <span class="inline-block px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded">
+                        v{{.Version}}
+                    </span>
+                </td>
+                <td>
+                    {{if .Tags}}
+                    <div class="flex flex-wrap gap-1">
+                        {{range .Tags}}
+                        <span class="inline-block px-2 py-1 text-xs bg-blue-800 text-blue-200 rounded">{{.}}</span>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <span class="text-slate-500 italic">—</span>
+                    {{end}}
+                </td>
+                <td class="max-w-md">
+                    <div class="relative group">
+                        <div class="text-sm text-slate-300 truncate">
+                            {{truncate .Value 100}}
+                        </div>
+                        {{if gt (len .Value) 100}}
+                        <div class="absolute left-0 top-6 z-10 hidden group-hover:block bg-slate-800 border border-slate-600 rounded p-3 shadow-lg max-w-md">
+                            <pre class="text-xs text-slate-300 whitespace-pre-wrap">{{.Value}}</pre>
+                        </div>
+                        {{end}}
+                    </div>
+                </td>
+                <td class="text-sm">
+                    <div>{{timeAgo .UpdatedAt}}</div>
+                    <div class="text-xs text-slate-400">{{formatTime .UpdatedAt}}</div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="text-center text-slate-500 italic py-8">
+                    {{if or .Filter.Agent .Filter.Prefix .Filter.Tag}}
+                    No memory entries match the current filters
+                    {{else}}
+                    No memory entries found
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if .Memory}}
+<div class="mt-6 text-sm text-slate-400">
+    Showing {{len .Memory}} memory entrie(s)
+    {{if .Filter.Limit}}
+    (limited to {{.Filter.Limit}})
+    {{end}}
+</div>
+{{end}}
+{{end}}
