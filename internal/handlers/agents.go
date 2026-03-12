@@ -61,8 +61,13 @@ type agentOnboardInput struct {
 	ID string `path:"id" doc:"Agent ID to onboard"`
 }
 
+type agentOnboardResponse struct {
+	Agent *model.Agent `json:"agent"`
+	Token string       `json:"token"`
+}
+
 type agentOnboardOutput struct {
-	Body *model.Agent
+	Body *agentOnboardResponse
 }
 
 // --- Handlers ---
@@ -140,7 +145,15 @@ func (a *API) agentOnboard(ctx context.Context, input *agentOnboardInput) (*agen
 	if err != nil {
 		return nil, huma.Error500InternalServerError("failed to generate agent token")
 	}
-	return &agentOnboardOutput{Body: agent}, nil
+	// Create a copy without the token exposed in JSON, and return token separately
+	agentCopy := *agent
+	agentCopy.Token = ""
+	return &agentOnboardOutput{
+		Body: &agentOnboardResponse{
+			Agent: &agentCopy,
+			Token: agent.Token,
+		},
+	}, nil
 }
 
 // --- Registration ---

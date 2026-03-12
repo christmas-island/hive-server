@@ -386,6 +386,33 @@ func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 	return result, nil
 }
 
+func (m *mockStore) GenerateAgentToken(_ context.Context, id string) (*model.Agent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("GenerateAgentToken"); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	existing, ok := m.agents[id]
+	if !ok {
+		agent := &model.Agent{
+			ID:           id,
+			Name:         id,
+			Status:       model.AgentStatusOnline,
+			Capabilities: []string{},
+			LastHeartbeat: now,
+			RegisteredAt: now,
+			Token:        "mock-token-" + id,
+		}
+		m.agents[id] = agent
+		return copyAgent(agent), nil
+	}
+
+	existing.Token = "mock-token-" + id
+	return copyAgent(existing), nil
+}
+
 // --- Discovery ---
 
 func (m *mockStore) UpsertChannel(_ context.Context, ch *model.DiscoveryChannel) (*model.DiscoveryChannel, error) {
@@ -800,6 +827,7 @@ func copyAgent(a *model.Agent) *model.Agent {
 		RegisteredAt:      a.RegisteredAt,
 		HiveLocalVersion:  a.HiveLocalVersion,
 		HivePluginVersion: a.HivePluginVersion,
+		Token:             a.Token,
 	}
 }
 
