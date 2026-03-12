@@ -52,12 +52,17 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 // migrate creates all required tables if they don't exist.
+// Split into two phases because CockroachDB cannot create an index on a column
+// that was added via ALTER TABLE in the same transaction.
 func (s *Store) migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, schema)
+	if _, err := s.db.ExecContext(ctx, schemaTables); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, schemaIndexes)
 	return err
 }
 
-const schema = `
+const schemaTables = `
 CREATE TABLE IF NOT EXISTS memory (
     key        TEXT    NOT NULL PRIMARY KEY,
     value      TEXT    NOT NULL DEFAULT '',
@@ -127,15 +132,6 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS hive_plugin_version  TEXT NOT NULL D
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS activity             TEXT NOT NULL DEFAULT '';
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS token                TEXT;
 
-CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory(agent_id);
-CREATE INDEX IF NOT EXISTS idx_agents_token ON agents(token) WHERE token IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
-CREATE INDEX IF NOT EXISTS idx_tasks_creator  ON tasks(creator);
-CREATE INDEX IF NOT EXISTS idx_task_notes_task ON task_notes(task_id);
-CREATE INDEX IF NOT EXISTS idx_discovery_channels_discord ON discovery_channels(discord_id);
-CREATE INDEX IF NOT EXISTS idx_discovery_roles_discord    ON discovery_roles(discord_id);
-
 CREATE TABLE IF NOT EXISTS claims (
     id          TEXT    NOT NULL PRIMARY KEY,
     type        TEXT    NOT NULL,
@@ -147,11 +143,6 @@ CREATE TABLE IF NOT EXISTS claims (
     expires_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_claims_active_resource
-    ON claims (resource) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_claims_agent ON claims(agent_id);
-CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
 
 -- Session context columns for memory, tasks, and claims.
 ALTER TABLE memory ADD COLUMN IF NOT EXISTS session_key     TEXT    NOT NULL DEFAULT '';
@@ -175,10 +166,6 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS sender_id       TEXT    NOT NULL DEF
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS sender_is_owner BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS sandboxed       BOOLEAN NOT NULL DEFAULT false;
 
-CREATE INDEX IF NOT EXISTS idx_memory_session ON memory(session_key);
-CREATE INDEX IF NOT EXISTS idx_tasks_session  ON tasks(session_key);
-CREATE INDEX IF NOT EXISTS idx_claims_session ON claims(session_key);
-
 -- Claim queue: agents waiting for a resource that is currently held.
 -- When the holder releases the claim, the first waiter (by queued_at) is
 -- promoted to holder atomically. TTL on waiters prevents stale queue entries.
@@ -197,9 +184,6 @@ CREATE TABLE IF NOT EXISTS claim_queue (
     expires_in_sec INTEGER NOT NULL DEFAULT 3600,
     queued_at      TEXT    NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_claim_queue_resource ON claim_queue(resource, queued_at);
-CREATE INDEX IF NOT EXISTS idx_claim_queue_agent    ON claim_queue(agent_id);
 
 -- Captured sessions: recorded agent sessions shipped by OpenClaw/ACP harness.
 CREATE TABLE IF NOT EXISTS captured_sessions (
@@ -224,6 +208,26 @@ CREATE TABLE IF NOT EXISTS captured_sessions (
     created_at       TEXT      NOT NULL DEFAULT ''
 );
 
+`
+
+const schemaIndexes = `
+CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agents_token ON agents(token) WHERE token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_status   ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee);
+CREATE INDEX IF NOT EXISTS idx_tasks_creator  ON tasks(creator);
+CREATE INDEX IF NOT EXISTS idx_task_notes_task ON task_notes(task_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_channels_discord ON discovery_channels(discord_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_roles_discord    ON discovery_roles(discord_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_claims_active_resource
+    ON claims (resource) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_claims_agent ON claims(agent_id);
+CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
+CREATE INDEX IF NOT EXISTS idx_memory_session ON memory(session_key);
+CREATE INDEX IF NOT EXISTS idx_tasks_session  ON tasks(session_key);
+CREATE INDEX IF NOT EXISTS idx_claims_session ON claims(session_key);
+CREATE INDEX IF NOT EXISTS idx_claim_queue_resource ON claim_queue(resource, queued_at);
+CREATE INDEX IF NOT EXISTS idx_claim_queue_agent    ON claim_queue(agent_id);
 CREATE INDEX IF NOT EXISTS idx_captured_sessions_agent   ON captured_sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_captured_sessions_repo    ON captured_sessions(repo);
 CREATE INDEX IF NOT EXISTS idx_captured_sessions_started ON captured_sessions(started_at);
