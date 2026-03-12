@@ -367,6 +367,18 @@ func TestUI_SessionsWithAllFilters(t *testing.T) {
 	}
 }
 
+func TestUI_RenderUnknownPage(t *testing.T) {
+	handler := ui.New(&mockStore{}, "")
+	w := httptest.NewRecorder()
+
+	// Call Render with a page name that doesn't exist in the pages map
+	handler.Render(w, "nonexistent.html", nil)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for unknown page, got %d", w.Code)
+	}
+}
+
 func TestUI_AuthMiddleware_WrongToken(t *testing.T) {
 	handler := ui.New(&mockStore{}, "secret")
 	router := handler.Routes()
