@@ -15,22 +15,26 @@ import (
 func scanAgentRow(row *sql.Row) (*model.Agent, error) {
 	var a model.Agent
 	var capsRaw, hbStr, regStr string
-	err := row.Scan(&a.ID, &a.Name, &a.Status, &a.Activity, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion, &a.HivePluginVersion, &a.Token)
+	var token sql.NullString
+	err := row.Scan(&a.ID, &a.Name, &a.Status, &a.Activity, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion, &a.HivePluginVersion, &token)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, model.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan agent: %w", err)
 	}
+	a.Token = token.String
 	return finishAgentScan(&a, capsRaw, hbStr, regStr)
 }
 
 func scanAgentRows(rows *sql.Rows) (*model.Agent, error) {
 	var a model.Agent
 	var capsRaw, hbStr, regStr string
-	if err := rows.Scan(&a.ID, &a.Name, &a.Status, &a.Activity, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion, &a.HivePluginVersion, &a.Token); err != nil {
+	var token sql.NullString
+	if err := rows.Scan(&a.ID, &a.Name, &a.Status, &a.Activity, &capsRaw, &hbStr, &regStr, &a.HiveLocalVersion, &a.HivePluginVersion, &token); err != nil {
 		return nil, fmt.Errorf("scan agent row: %w", err)
 	}
+	a.Token = token.String
 	return finishAgentScan(&a, capsRaw, hbStr, regStr)
 }
 
