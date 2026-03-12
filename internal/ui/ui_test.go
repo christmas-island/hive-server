@@ -311,6 +311,114 @@ func TestUI_SessionsError(t *testing.T) {
 	}
 }
 
+func TestUI_AgentsError(t *testing.T) {
+	store := &mockStore{failOn: "ListAgents"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/agents", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_TasksError(t *testing.T) {
+	store := &mockStore{failOn: "ListTasks"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_ClaimsError(t *testing.T) {
+	store := &mockStore{failOn: "ListClaims"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/claims", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_MemoryError(t *testing.T) {
+	store := &mockStore{failOn: "ListMemory"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/memory", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_TasksWithAllFilters(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/tasks?status=open&assignee=jathyclaw&creator=jakeclaw&limit=10", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_ClaimsWithAllFilters(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/claims?status=active&agent=jathyclaw&limit=25", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_MemoryWithLimit(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/memory?limit=100", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_SessionsWithAllFilters(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/sessions?agent=jathyclaw&repo=hive-server&limit=10", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
 func TestUI_AuthMiddleware_WrongToken(t *testing.T) {
 	handler := ui.New(&mockStore{}, "secret")
 	router := handler.Routes()
