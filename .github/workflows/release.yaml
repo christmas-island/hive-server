@@ -102,6 +102,17 @@ jobs:
         id: sha
         run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve version
+        id: version
+        run: |
+          # Use latest git tag if available, otherwise fall back to sha-<short>
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$TAG" ]; then
+            echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
         with:
           registry: ghcr.io
@@ -122,6 +133,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ steps.sha.outputs.short }}
+            DATE=${{ github.event.head_commit.timestamp }}
 
   # k8s manifest updates are now handled by ArgoCD Image Updater.
   # See christmas-island/k8s argocd/applications/hive-server.yaml for annotations.
