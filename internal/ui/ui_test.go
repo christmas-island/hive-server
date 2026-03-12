@@ -245,72 +245,6 @@ func TestUI_DashboardMemoryError(t *testing.T) {
 	}
 }
 
-func TestUI_TasksWithFilter(t *testing.T) {
-	handler := newMockUI()
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/tasks?status=open&assignee=jathyclaw", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
-	}
-}
-
-func TestUI_ClaimsWithFilter(t *testing.T) {
-	handler := newMockUI()
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/claims?status=active", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
-	}
-}
-
-func TestUI_MemoryWithFilter(t *testing.T) {
-	handler := newMockUI()
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/memory?agent=jathyclaw&prefix=test&tag=foo", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
-	}
-}
-
-func TestUI_SessionsWithFilter(t *testing.T) {
-	handler := newMockUI()
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/sessions?agent=jathyclaw", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
-	}
-}
-
-func TestUI_SessionsError(t *testing.T) {
-	store := &mockStore{failOn: "ListCapturedSessions"}
-	handler := ui.New(store, "")
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/sessions", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", w.Code)
-	}
-}
-
 func TestUI_AgentsError(t *testing.T) {
 	store := &mockStore{failOn: "ListAgents"}
 	handler := ui.New(store, "")
@@ -359,6 +293,20 @@ func TestUI_MemoryError(t *testing.T) {
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/memory", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_SessionsError(t *testing.T) {
+	store := &mockStore{failOn: "ListCapturedSessions"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/sessions", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -431,61 +379,5 @@ func TestUI_AuthMiddleware_WrongToken(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 with wrong token, got %d", w.Code)
-	}
-}
-
-func TestUI_AgentsError(t *testing.T) {
-	store := &mockStore{failOn: "ListAgents"}
-	handler := ui.New(store, "")
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/agents", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", w.Code)
-	}
-}
-
-func TestUI_TasksError(t *testing.T) {
-	store := &mockStore{failOn: "ListTasks"}
-	handler := ui.New(store, "")
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", w.Code)
-	}
-}
-
-func TestUI_ClaimsError(t *testing.T) {
-	store := &mockStore{failOn: "ListClaims"}
-	handler := ui.New(store, "")
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/claims", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", w.Code)
-	}
-}
-
-func TestUI_MemoryError(t *testing.T) {
-	store := &mockStore{failOn: "ListMemory"}
-	handler := ui.New(store, "")
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/memory", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", w.Code)
 	}
 }
