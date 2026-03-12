@@ -122,6 +122,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=sha-${{ steps.sha.outputs.short }}
+            COMMIT=${{ steps.sha.outputs.short }}
+            DATE=${{ github.event.head_commit.timestamp }}
 
   # k8s manifest updates are now handled by ArgoCD Image Updater.
   # See christmas-island/k8s argocd/applications/hive-server.yaml for annotations.
