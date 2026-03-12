@@ -2,44 +2,74 @@ package ui_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/christmas-island/hive-server/internal/model"
 	"github.com/christmas-island/hive-server/internal/ui"
 )
 
 // mockStore implements ui.Store for testing
-type mockStore struct{}
-
-func (m *mockStore) ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error) {
-	return []*model.MemoryEntry{}, nil
+type mockStore struct {
+	failOn string // set to method name to make it return an error
 }
 
-func (m *mockStore) ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Task, error) {
-	return []*model.Task{}, nil
+func (m *mockStore) ListMemory(_ context.Context, _ model.MemoryFilter) ([]*model.MemoryEntry, error) {
+	if m.failOn == "ListMemory" {
+		return nil, errors.New("mock error")
+	}
+	return []*model.MemoryEntry{
+		{Key: "test-key", Value: "test-value", AgentID: "jathyclaw", UpdatedAt: time.Now()},
+	}, nil
 }
 
-func (m *mockStore) ListAgents(ctx context.Context) ([]*model.Agent, error) {
-	return []*model.Agent{}, nil
+func (m *mockStore) ListTasks(_ context.Context, _ model.TaskFilter) ([]*model.Task, error) {
+	if m.failOn == "ListTasks" {
+		return nil, errors.New("mock error")
+	}
+	return []*model.Task{
+		{ID: "t1", Title: "Test task", Status: model.TaskStatusOpen, Creator: "jathyclaw"},
+	}, nil
 }
 
-func (m *mockStore) GetAgent(ctx context.Context, id string) (*model.Agent, error) {
+func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
+	if m.failOn == "ListAgents" {
+		return nil, errors.New("mock error")
+	}
+	return []*model.Agent{
+		{ID: "jathyclaw", Status: model.AgentStatusOnline, LastHeartbeat: time.Now()},
+		{ID: "dragonclaw", Status: model.AgentStatusOffline, LastHeartbeat: time.Now().Add(-1 * time.Hour)},
+	}, nil
+}
+
+func (m *mockStore) GetAgent(_ context.Context, id string) (*model.Agent, error) {
 	return &model.Agent{ID: id}, nil
 }
 
-func (m *mockStore) ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.Claim, error) {
-	return []*model.Claim{}, nil
+func (m *mockStore) ListClaims(_ context.Context, _ model.ClaimFilter) ([]*model.Claim, error) {
+	if m.failOn == "ListClaims" {
+		return nil, errors.New("mock error")
+	}
+	return []*model.Claim{
+		{ID: "c1", Resource: "test-resource", AgentID: "jathyclaw", Status: "active"},
+	}, nil
 }
 
-func (m *mockStore) ListTodos(ctx context.Context, f model.TodoFilter) ([]*model.Todo, error) {
+func (m *mockStore) ListTodos(_ context.Context, _ model.TodoFilter) ([]*model.Todo, error) {
 	return []*model.Todo{}, nil
 }
 
-func (m *mockStore) ListCapturedSessions(ctx context.Context, f model.SessionFilter) ([]*model.CapturedSession, error) {
-	return []*model.CapturedSession{}, nil
+func (m *mockStore) ListCapturedSessions(_ context.Context, _ model.SessionFilter) ([]*model.CapturedSession, error) {
+	if m.failOn == "ListCapturedSessions" {
+		return nil, errors.New("mock error")
+	}
+	return []*model.CapturedSession{
+		{ID: "s1", AgentID: "jathyclaw"},
+	}, nil
 }
 
 // newMockUI creates a UI handler with mock store for testing
@@ -140,22 +170,159 @@ func TestUI_AuthMiddleware_WithToken(t *testing.T) {
 func TestUI_TemplateRendering(t *testing.T) {
 	handler := newMockUI()
 	router := handler.Routes()
-	
+
 	// Test that templates render without error
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
-	
+
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
-	
-	// Check that it returns HTML conten
+
+	// Check that it returns HTML content
 	contentType := w.Header().Get("Content-Type")
 	body := w.Body.String()
-	
+
 	if !strings.Contains(body, "<html") && !strings.Contains(contentType, "text/html") {
 		t.Error("expected HTML content to be returned")
+	}
+}
+
+func TestUI_DashboardError(t *testing.T) {
+	store := &mockStore{failOn: "ListAgents"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_DashboardTasksError(t *testing.T) {
+	store := &mockStore{failOn: "ListTasks"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_DashboardClaimsError(t *testing.T) {
+	store := &mockStore{failOn: "ListClaims"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_DashboardMemoryError(t *testing.T) {
+	store := &mockStore{failOn: "ListMemory"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_TasksWithFilter(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/tasks?status=open&assignee=jathyclaw", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_ClaimsWithFilter(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/claims?status=active", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_MemoryWithFilter(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/memory?agent=jathyclaw&prefix=test&tag=foo", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_SessionsWithFilter(t *testing.T) {
+	handler := newMockUI()
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/sessions?agent=jathyclaw", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestUI_SessionsError(t *testing.T) {
+	store := &mockStore{failOn: "ListCapturedSessions"}
+	handler := ui.New(store, "")
+	router := handler.Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/sessions", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestUI_AuthMiddleware_WrongToken(t *testing.T) {
+	handler := ui.New(&mockStore{}, "secret")
+	router := handler.Routes()
+
+	// Request with wrong token should be unauthorized
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer wrong")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 with wrong token, got %d", w.Code)
 	}
 }
