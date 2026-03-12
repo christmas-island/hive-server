@@ -185,6 +185,19 @@ CREATE TABLE IF NOT EXISTS claim_queue (
     queued_at      TEXT    NOT NULL
 );
 
+-- Agent-scoped ephemeral todos for work tracking across session restarts.
+CREATE TABLE IF NOT EXISTS todos (
+    id          TEXT    NOT NULL PRIMARY KEY,
+    agent_id    TEXT    NOT NULL,
+    title       TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'pending',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    parent_task TEXT    NOT NULL DEFAULT '',
+    context     TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL,
+    updated_at  TEXT    NOT NULL
+);
+
 -- Captured sessions: recorded agent sessions shipped by OpenClaw/ACP harness.
 CREATE TABLE IF NOT EXISTS captured_sessions (
     id               TEXT      NOT NULL PRIMARY KEY,
@@ -208,6 +221,18 @@ CREATE TABLE IF NOT EXISTS captured_sessions (
     created_at       TEXT      NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS todos (
+    id          TEXT    NOT NULL PRIMARY KEY,
+    agent_id    TEXT    NOT NULL,
+    title       TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'pending',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    parent_task TEXT    NOT NULL DEFAULT '',
+    context     TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL,
+    updated_at  TEXT    NOT NULL
+);
+
 `
 
 const schemaIndexes = `
@@ -228,7 +253,11 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session  ON tasks(session_key);
 CREATE INDEX IF NOT EXISTS idx_claims_session ON claims(session_key);
 CREATE INDEX IF NOT EXISTS idx_claim_queue_resource ON claim_queue(resource, queued_at);
 CREATE INDEX IF NOT EXISTS idx_claim_queue_agent    ON claim_queue(agent_id);
+CREATE INDEX IF NOT EXISTS idx_todos_agent ON todos(agent_id);
+CREATE INDEX IF NOT EXISTS idx_todos_agent_status ON todos(agent_id, status);
 CREATE INDEX IF NOT EXISTS idx_captured_sessions_agent   ON captured_sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_captured_sessions_repo    ON captured_sessions(repo);
 CREATE INDEX IF NOT EXISTS idx_captured_sessions_started ON captured_sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_todos_agent ON todos(agent_id);
+CREATE INDEX IF NOT EXISTS idx_todos_agent_status ON todos(agent_id, status);
 `

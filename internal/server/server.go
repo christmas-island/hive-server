@@ -37,6 +37,14 @@ type claimExpirer interface {
 // It is a variable (not const) so tests can override it for fast-tick scenarios.
 var claimExpiryInterval = time.Minute
 
+// todoPruner is satisfied by any type that can prune completed todos.
+type todoPruner interface {
+	PruneDoneTodos(ctx context.Context, agentID string, olderThan time.Duration) (int64, error)
+}
+
+// todoPruneInterval is how often the background goroutine prunes completed todos.
+var todoPruneInterval = time.Hour
+
 // runClaimExpiry sweeps for and expires stale active claims on a fixed interval.
 // It runs until ctx is cancelled.
 func runClaimExpiry(ctx context.Context, ce claimExpirer) {
@@ -52,6 +60,26 @@ func runClaimExpiry(ctx context.Context, ce claimExpirer) {
 				log.Error("expire claims: ", err)
 			} else if n > 0 {
 				log.Info(fmt.Sprintf("expired %d stale claim(s)", n))
+			}
+		}
+	}
+}
+
+// runTodoPrune periodically prunes completed todos older than 24 hours.
+// It prunes across all agents by passing an empty agent ID with a 24h threshold.
+func runTodoPrune(ctx context.Context, tp todoPruner) {
+	ticker := time.NewTicker(todoPruneInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := tp.PruneDoneTodos(ctx, "", 24*time.Hour)
+			if err != nil {
+				log.Error("prune todos: ", err)
+			} else if n > 0 {
+				log.Info(fmt.Sprintf("pruned %d completed todo(s)", n))
 			}
 		}
 	}
@@ -100,6 +128,9 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Start background claim expiry sweep.
 	go runClaimExpiry(ctx, s.store)
+
+	// Start background todo pruner.
+	go runTodoPrune(ctx, s.store)
 
 	// Create relay client (no-op if URL is empty).
 	rc := relay.New(s.config.OnlyClawsURL, s.config.OnlyClawsToken)
