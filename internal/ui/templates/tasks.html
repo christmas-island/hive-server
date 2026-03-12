@@ -23,17 +23,17 @@
         </div>
         <div class="flex flex-col">
             <label for="assignee" class="text-sm font-medium text-slate-300 mb-1">Assignee</label>
-            <input type="text" name="assignee" id="assignee" value="{{.Filter.Assignee}}" 
+            <input type="text" name="assignee" id="assignee" value="{{.Filter.Assignee}}"
                    placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex flex-col">
             <label for="creator" class="text-sm font-medium text-slate-300 mb-1">Creator</label>
-            <input type="text" name="creator" id="creator" value="{{.Filter.Creator}}" 
+            <input type="text" name="creator" id="creator" value="{{.Filter.Creator}}"
                    placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex flex-col">
             <label for="limit" class="text-sm font-medium text-slate-300 mb-1">Limit</label>
-            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}50{{end}}" 
+            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}50{{end}}"
                    min="1" max="500" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex items-end">
