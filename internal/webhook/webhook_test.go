@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -19,14 +20,22 @@ import (
 // --- mock store ---
 
 type mockStore struct {
-	mu     sync.Mutex
-	tasks  []*model.Task
-	claims []*model.Claim
+	mu             sync.Mutex
+	tasks          []*model.Task
+	claims         []*model.Claim
+	createTaskErr  error
+	listTasksErr   error
+	updateTaskErr  error
+	listClaimsErr  error
+	releaseClaimErr error
 }
 
 func (m *mockStore) CreateTask(_ context.Context, t *model.Task) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.createTaskErr != nil {
+		return nil, m.createTaskErr
+	}
 	t.ID = "task-" + t.Title
 	t.Status = model.TaskStatusOpen
 	t.CreatedAt = time.Now().UTC()
@@ -44,6 +53,9 @@ func (m *mockStore) CreateTask(_ context.Context, t *model.Task) (*model.Task, e
 func (m *mockStore) ListTasks(_ context.Context, _ model.TaskFilter) ([]*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.listTasksErr != nil {
+		return nil, m.listTasksErr
+	}
 	result := make([]*model.Task, len(m.tasks))
 	copy(result, m.tasks)
 	return result, nil
@@ -52,6 +64,9 @@ func (m *mockStore) ListTasks(_ context.Context, _ model.TaskFilter) ([]*model.T
 func (m *mockStore) UpdateTask(_ context.Context, id string, upd model.TaskUpdate) (*model.Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.updateTaskErr != nil {
+		return nil, m.updateTaskErr
+	}
 	for _, t := range m.tasks {
 		if t.ID == id {
 			if upd.Status != nil {
@@ -67,6 +82,9 @@ func (m *mockStore) UpdateTask(_ context.Context, id string, upd model.TaskUpdat
 func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model.Claim, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.listClaimsErr != nil {
+		return nil, m.listClaimsErr
+	}
 	var result []*model.Claim
 	for _, c := range m.claims {
 		if f.Resource != "" && c.Resource != f.Resource {
@@ -83,6 +101,9 @@ func (m *mockStore) ListClaims(_ context.Context, f model.ClaimFilter) ([]*model
 func (m *mockStore) ReleaseClaim(_ context.Context, id string) (*model.ClaimReleaseResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.releaseClaimErr != nil {
+		return nil, m.releaseClaimErr
+	}
 	for _, c := range m.claims {
 		if c.ID == id {
 			c.Status = model.ClaimStatusReleased
@@ -459,5 +480,221 @@ func TestHandler_TagDeleted_NoClaims(t *testing.T) {
 	}
 	if ms.claims[0].Status != model.ClaimStatusActive {
 		t.Errorf("tag delete should not release claims, got %q", ms.claims[0].Status)
+	}
+}
+
+// --- error path tests ---
+
+func TestHandler_CreateTaskError_PR(t *testing.T) {
+	ms := &mockStore{createTaskErr: fmt.Errorf("db down")}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "pull_request", map[string]any{
+		"action": "opened",
+		"pull_request": map[string]any{
+			"number":   1,
+			"title":    "Err PR",
+			"body":     "",
+			"merged":   false,
+			"html_url": "https://github.com/org/repo/pull/1",
+			"head":     map[string]any{"ref": "feat/err"},
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (errors are logged, not returned)", rr.Code)
+	}
+}
+
+func TestHandler_CreateTaskError_Issue(t *testing.T) {
+	ms := &mockStore{createTaskErr: fmt.Errorf("db down")}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "issues", map[string]any{
+		"action": "opened",
+		"issue": map[string]any{
+			"number":   1,
+			"title":    "Err Issue",
+			"body":     "",
+			"html_url": "https://github.com/org/repo/issues/1",
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_ListClaimsError(t *testing.T) {
+	ms := &mockStore{listClaimsErr: fmt.Errorf("db down")}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "pull_request", map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"number":   2,
+			"title":    "Merged",
+			"body":     "",
+			"merged":   true,
+			"html_url": "https://github.com/org/repo/pull/2",
+			"head":     map[string]any{"ref": "feat/err-claims"},
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_ReleaseClaimError(t *testing.T) {
+	ms := &mockStore{
+		releaseClaimErr: fmt.Errorf("db down"),
+		claims: []*model.Claim{
+			{
+				ID:       "claim-err",
+				Type:     model.ClaimTypeIssue,
+				Resource: "feat/err-release",
+				AgentID:  "agent",
+				Status:   model.ClaimStatusActive,
+			},
+		},
+	}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "pull_request", map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"number":   3,
+			"title":    "Merged with err",
+			"body":     "",
+			"merged":   true,
+			"html_url": "https://github.com/org/repo/pull/3",
+			"head":     map[string]any{"ref": "feat/err-release"},
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_ListTasksError_IssueClosed(t *testing.T) {
+	ms := &mockStore{listTasksErr: fmt.Errorf("db down")}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "issues", map[string]any{
+		"action": "closed",
+		"issue": map[string]any{
+			"number":   50,
+			"title":    "Err close",
+			"body":     "",
+			"html_url": "https://github.com/org/repo/issues/50",
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_UpdateTaskError_IssueClosed(t *testing.T) {
+	ms := &mockStore{
+		updateTaskErr: fmt.Errorf("db down"),
+		tasks: []*model.Task{
+			{
+				ID:     "task-Issue #60: Fail update",
+				Title:  "Issue #60: Fail update",
+				Status: model.TaskStatusOpen,
+			},
+		},
+	}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "issues", map[string]any{
+		"action": "closed",
+		"issue": map[string]any{
+			"number":   60,
+			"title":    "Fail update",
+			"body":     "",
+			"html_url": "https://github.com/org/repo/issues/60",
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_BadJSON_PullRequest(t *testing.T) {
+	h := New("", &mockStore{})
+	body := []byte(`{not valid json`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/github", bytes.NewReader(body))
+	req.Header.Set("X-GitHub-Event", "pull_request")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (bad JSON logged, not 4xx)", rr.Code)
+	}
+}
+
+func TestHandler_BadJSON_Issues(t *testing.T) {
+	h := New("", &mockStore{})
+	body := []byte(`{not valid json`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/github", bytes.NewReader(body))
+	req.Header.Set("X-GitHub-Event", "issues")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_BadJSON_Delete(t *testing.T) {
+	h := New("", &mockStore{})
+	body := []byte(`{not valid json`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/github", bytes.NewReader(body))
+	req.Header.Set("X-GitHub-Event", "delete")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_DeleteBranch_EmptyRef(t *testing.T) {
+	ms := &mockStore{}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "delete", map[string]any{
+		"ref_type": "branch",
+		"ref":      "",
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+func TestHandler_PRMerged_EmptyBranch(t *testing.T) {
+	ms := &mockStore{}
+	h := New(testSecret, ms)
+
+	rr := makeRequest(t, h, "pull_request", map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"number":   4,
+			"title":    "Empty branch",
+			"body":     "",
+			"merged":   true,
+			"html_url": "",
+			"head":     map[string]any{"ref": ""},
+		},
+	}, testSecret)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
 	}
 }
