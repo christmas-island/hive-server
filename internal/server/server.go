@@ -11,6 +11,7 @@ import (
 	"github.com/christmas-island/hive-server/internal/log"
 	"github.com/christmas-island/hive-server/internal/relay"
 	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/ui"
 	"github.com/christmas-island/hive-server/internal/webhook"
 )
 
@@ -97,6 +98,10 @@ func buildMux(st *store.Store, token string, rc *relay.Client, webhookSecret str
 	// GitHub webhook endpoint — bypasses Bearer auth (uses HMAC signature validation).
 	wh := webhook.New(webhookSecret, st)
 	mux.Handle("POST /api/v1/webhooks/github", wh)
+
+	// Web UI — with same auth middleware as API
+	uiHandler := ui.New(st, token)
+	mux.Handle("/ui/", http.StripPrefix("/ui", uiHandler.Routes()))
 
 	mux.Handle("/", handlers.New(st, token, rc))
 

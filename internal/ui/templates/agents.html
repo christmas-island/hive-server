@@ -1,0 +1,79 @@
+{{template "layout.html" .}}
+
+{{define "content"}}
+<div class="mb-6">
+    <h2 class="text-2xl font-bold text-cyan-400 mb-2">Agents</h2>
+    <p class="text-slate-400">Registered agents and their status</p>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Agent ID</th>
+                <th>Status</th>
+                <th>Activity</th>
+                <th>Capabilities</th>
+                <th>Last Heartbeat</th>
+                <th>Versions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Agents}}
+            <tr>
+                <td class="font-mono font-medium text-slate-200">{{.ID}}</td>
+                <td>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 rounded-full {{statusClass .Status}}"></div>
+                        <span class="status-badge status-{{.Status}}">{{.Status}}</span>
+                    </div>
+                </td>
+                <td class="max-w-xs">
+                    {{if .Activity}}
+                    <span class="text-slate-300 truncate">{{truncate .Activity 50}}</span>
+                    {{else}}
+                    <span class="text-slate-500 italic">—</span>
+                    {{end}}
+                </td>
+                <td>
+                    <div class="flex flex-wrap gap-1">
+                        {{range .Capabilities}}
+                        <span class="inline-block px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded">{{.}}</span>
+                        {{else}}
+                        <span class="text-slate-500 italic">None</span>
+                        {{end}}
+                    </div>
+                </td>
+                <td>
+                    <div class="text-sm">
+                        <div>{{timeAgo .LastHeartbeat}}</div>
+                        <div class="text-xs text-slate-400">{{formatTime .LastHeartbeat}}</div>
+                    </div>
+                </td>
+                <td class="text-xs">
+                    {{if .HiveLocalVersion}}
+                    <div class="text-slate-300">local: {{.HiveLocalVersion}}</div>
+                    {{end}}
+                    {{if .HivePluginVersion}}
+                    <div class="text-slate-300">plugin: {{.HivePluginVersion}}</div>
+                    {{end}}
+                    {{if not .HiveLocalVersion}}{{if not .HivePluginVersion}}
+                    <span class="text-slate-500">—</span>
+                    {{end}}{{end}}
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="text-center text-slate-500 italic py-8">No agents registered</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if .Agents}}
+<div class="mt-6 text-sm text-slate-400">
+    Showing {{len .Agents}} agent(s)
+</div>
+{{end}}
+{{end}}

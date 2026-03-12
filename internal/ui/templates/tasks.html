@@ -1,0 +1,123 @@
+{{template "layout.html" .}}
+
+{{define "content"}}
+<div class="mb-6">
+    <h2 class="text-2xl font-bold text-cyan-400 mb-2">Tasks</h2>
+    <p class="text-slate-400">Task board and work coordination</p>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <form method="GET" action="/ui/tasks" class="flex flex-wrap gap-4">
+        <div class="flex flex-col">
+            <label for="status" class="text-sm font-medium text-slate-300 mb-1">Status</label>
+            <select name="status" id="status" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+                <option value="">All</option>
+                <option value="open" {{if eq .Filter.Status "open"}}selected{{end}}>Open</option>
+                <option value="claimed" {{if eq .Filter.Status "claimed"}}selected{{end}}>Claimed</option>
+                <option value="in_progress" {{if eq .Filter.Status "in_progress"}}selected{{end}}>In Progress</option>
+                <option value="done" {{if eq .Filter.Status "done"}}selected{{end}}>Done</option>
+                <option value="failed" {{if eq .Filter.Status "failed"}}selected{{end}}>Failed</option>
+                <option value="cancelled" {{if eq .Filter.Status "cancelled"}}selected{{end}}>Cancelled</option>
+            </select>
+        </div>
+        <div class="flex flex-col">
+            <label for="assignee" class="text-sm font-medium text-slate-300 mb-1">Assignee</label>
+            <input type="text" name="assignee" id="assignee" value="{{.Filter.Assignee}}" 
+                   placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="creator" class="text-sm font-medium text-slate-300 mb-1">Creator</label>
+            <input type="text" name="creator" id="creator" value="{{.Filter.Creator}}" 
+                   placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex flex-col">
+            <label for="limit" class="text-sm font-medium text-slate-300 mb-1">Limit</label>
+            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}50{{end}}" 
+                   min="1" max="500" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
+        </div>
+        <div class="flex items-end">
+            <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded font-medium">
+                Filter
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Creator</th>
+                <th>Assignee</th>
+                <th>Priority</th>
+                <th>Created</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Tasks}}
+            <tr>
+                <td class="font-mono text-sm">{{truncate .ID 12}}</td>
+                <td class="max-w-xs">
+                    <div class="font-medium text-slate-200 truncate">{{truncate .Title 40}}</div>
+                    {{if .Description}}
+                    <div class="text-sm text-slate-400 truncate mt-1">{{truncate .Description 60}}</div>
+                    {{end}}
+                </td>
+                <td>
+                    <span class="status-badge status-{{.Status}}">{{.Status}}</span>
+                </td>
+                <td class="font-mono text-sm">{{.Creator}}</td>
+                <td class="font-mono text-sm">
+                    {{if .Assignee}}
+                    {{.Assignee}}
+                    {{else}}
+                    <span class="text-slate-500 italic">Unassigned</span>
+                    {{end}}
+                </td>
+                <td>
+                    {{if eq .Priority 0}}
+                    <span class="text-slate-500">Normal</span>
+                    {{else if gt .Priority 0}}
+                    <span class="text-orange-400 font-medium">High (+{{.Priority}})</span>
+                    {{else}}
+                    <span class="text-blue-400">Low ({{.Priority}})</span>
+                    {{end}}
+                </td>
+                <td class="text-sm">
+                    <div>{{timeAgo .CreatedAt}}</div>
+                    <div class="text-xs text-slate-400">{{formatTime .CreatedAt}}</div>
+                </td>
+                <td class="text-sm">
+                    <div>{{timeAgo .UpdatedAt}}</div>
+                    <div class="text-xs text-slate-400">{{formatTime .UpdatedAt}}</div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="8" class="text-center text-slate-500 italic py-8">
+                    {{if or .Filter.Status .Filter.Assignee .Filter.Creator}}
+                    No tasks match the current filters
+                    {{else}}
+                    No tasks found
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{if .Tasks}}
+<div class="mt-6 text-sm text-slate-400">
+    Showing {{len .Tasks}} task(s)
+    {{if .Filter.Limit}}
+    (limited to {{.Filter.Limit}})
+    {{end}}
+</div>
+{{end}}
+{{end}}

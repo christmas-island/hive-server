@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Hive Server</title>
+    <link rel="stylesheet" href="/ui/static/app.css">
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+    <header class="bg-slate-900 border-b border-slate-800">
+        <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold text-cyan-400">🐝 Hive Server</h1>
+                    </div>
+                    <div class="hidden md:block">
+                        <div class="flex items-baseline space-x-4">
+                            <a href="/ui/" class="nav-link">Dashboard</a>
+                            <a href="/ui/agents" class="nav-link">Agents</a>
+                            <a href="/ui/tasks" class="nav-link">Tasks</a>
+                            <a href="/ui/claims" class="nav-link">Claims</a>
+                            <a href="/ui/memory" class="nav-link">Memory</a>
+                            <a href="/ui/sessions" class="nav-link">Sessions</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div class="px-4 py-6 sm:px-0">
+            {{block "content" .}}{{end}}
+        </div>
+    </main>
+
+    <!-- Mobile menu toggle (if needed later) -->
+    <script>
+        // Add current page highlighting
+        const currentPath = window.location.pathname;
+        const links = document.querySelectorAll('.nav-link');
+        links.forEach(link => {
+            if (link.getAttribute('href') === currentPath || 
+                (currentPath === '/ui/' && link.getAttribute('href') === '/ui/')) {
+                link.classList.add('nav-active');
+            }
+        });
+    </script>
+</body>
+</html>
