@@ -405,3 +405,73 @@ func TestGetAgent_NilRowValue(t *testing.T) {
 		t.Error("expected error, got nil")
 	}
 }
+
+// TestGenerateAgentToken_Success verifies token generation and upsert.
+func TestGenerateAgentToken_Success(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	now := time.Now().UTC()
+
+	// Expect transaction: begin → exec upsert → commit
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO agents`)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	// Expect GetAgent query after token generation
+	rows := sqlmock.NewRows([]string{"id", "name", "status", "activity", "capabilities", "last_heartbeat", "registered_at", "hive_local_version", "hive_plugin_version", "token"}).
+		AddRow("new-agent", "new-agent", "online", "", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "", "", "generated-token")
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
+	)).WithArgs("new-agent").WillReturnRows(rows)
+
+	agent, err := s.GenerateAgentToken(context.Background(), "new-agent")
+	if err != nil {
+		t.Fatalf("GenerateAgentToken: %v", err)
+	}
+	if agent.ID != "new-agent" {
+		t.Errorf("ID = %q, want new-agent", agent.ID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// TestGenerateAgentToken_ExecError verifies error when upsert fails.
+func TestGenerateAgentToken_ExecError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	dbErr := errors.New("upsert error")
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO agents`)).WillReturnError(dbErr)
+	mock.ExpectRollback()
+
+	_, err := s.GenerateAgentToken(context.Background(), "err-agent")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// TestGenerateAgentToken_GetAgentError verifies error when post-generation read fails.
+func TestGenerateAgentToken_GetAgentError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	// Transaction succeeds
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO agents`)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	// But GetAgent fails
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
+	)).WithArgs("ghost").WillReturnError(sql.ErrNoRows)
+
+	_, err := s.GenerateAgentToken(context.Background(), "ghost")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
