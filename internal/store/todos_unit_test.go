@@ -256,6 +256,190 @@ func TestPruneDoneTodos_SpecificAgent(t *testing.T) {
 	}
 }
 
+// --- UpdateTodo ---
+
+func TestUpdateTodo_StatusOnly(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	status := model.TodoStatusDone
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("todo-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE todos SET status`).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	// GetTodo after update
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, agent_id, title, status, sort_order, parent_task, context, created_at, updated_at FROM todos WHERE id = $1`,
+	)).WithArgs("todo-1").WillReturnRows(newTodoRow("todo-1", "shopclaw", "test", "done", 0))
+
+	got, err := s.UpdateTodo(context.Background(), "todo-1", model.TodoUpdate{Status: &status})
+	if err != nil {
+		t.Fatalf("UpdateTodo: %v", err)
+	}
+	if got.ID != "todo-1" {
+		t.Errorf("ID = %q, want todo-1", got.ID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet: %v", err)
+	}
+}
+
+func TestUpdateTodo_TitleAndContext(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	title := "new title"
+	ctx := "new context"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("todo-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE todos SET title`).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(`UPDATE todos SET context`).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery(regexp.QuoteMeta(
+		`SELECT id, agent_id, title, status, sort_order, parent_task, context, created_at, updated_at FROM todos WHERE id = $1`,
+	)).WithArgs("todo-1").WillReturnRows(newTodoRow("todo-1", "shopclaw", "new title", "pending", 0))
+
+	got, err := s.UpdateTodo(context.Background(), "todo-1", model.TodoUpdate{Title: &title, Context: &ctx})
+	if err != nil {
+		t.Fatalf("UpdateTodo: %v", err)
+	}
+	if got.Title != "new title" {
+		t.Errorf("Title = %q, want 'new title'", got.Title)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet: %v", err)
+	}
+}
+
+func TestUpdateTodo_NotFound(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	title := "nope"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("missing").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectRollback()
+
+	_, err := s.UpdateTodo(context.Background(), "missing", model.TodoUpdate{Title: &title})
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpdateTodo_ExistsCheckError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	title := "fail"
+	dbErr := errors.New("exists check failed")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("todo-1").WillReturnError(dbErr)
+	mock.ExpectRollback()
+
+	_, err := s.UpdateTodo(context.Background(), "todo-1", model.TodoUpdate{Title: &title})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestUpdateTodo_StatusExecError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	status := model.TodoStatusDone
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("todo-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE todos SET status`).WillReturnError(errors.New("update failed"))
+	mock.ExpectRollback()
+
+	_, err := s.UpdateTodo(context.Background(), "todo-1", model.TodoUpdate{Status: &status})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestUpdateTodo_TitleExecError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	title := "fail"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("todo-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE todos SET title`).WillReturnError(errors.New("title update failed"))
+	mock.ExpectRollback()
+
+	_, err := s.UpdateTodo(context.Background(), "todo-1", model.TodoUpdate{Title: &title})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestUpdateTodo_ContextExecError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	ctx := "fail"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT EXISTS`).WithArgs("todo-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE todos SET context`).WillReturnError(errors.New("ctx update failed"))
+	mock.ExpectRollback()
+
+	_, err := s.UpdateTodo(context.Background(), "todo-1", model.TodoUpdate{Context: &ctx})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- finishTodoScan edge cases ---
+
+func TestFinishTodoScan_RFC3339Fallback(t *testing.T) {
+	todo := &model.Todo{ID: "t1"}
+	// RFC3339 without Nano
+	got, err := finishTodoScan(todo, "2026-03-12T01:00:00Z", "2026-03-12T02:00:00Z")
+	if err != nil {
+		t.Fatalf("finishTodoScan: %v", err)
+	}
+	if got.CreatedAt.IsZero() {
+		t.Error("expected non-zero CreatedAt")
+	}
+	if got.UpdatedAt.IsZero() {
+		t.Error("expected non-zero UpdatedAt")
+	}
+}
+
+func TestFinishTodoScan_InvalidTimestamp(t *testing.T) {
+	todo := &model.Todo{ID: "t1"}
+	got, err := finishTodoScan(todo, "not-a-date", "also-not")
+	if err != nil {
+		t.Fatalf("finishTodoScan: %v", err)
+	}
+	if !got.CreatedAt.IsZero() {
+		t.Error("expected zero CreatedAt for invalid timestamp")
+	}
+}
+
+// --- PruneDoneTodos error ---
+
+func TestPruneDoneTodos_DBError(t *testing.T) {
+	db, mock := newMockDB(t)
+	s := &Store{db: db}
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`DELETE FROM todos WHERE status`).WillReturnError(errors.New("prune failed"))
+	mock.ExpectRollback()
+
+	_, err := s.PruneDoneTodos(context.Background(), "", 24*time.Hour)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 // --- ReorderTodos ---
 
 func TestReorderTodos_Success(t *testing.T) {

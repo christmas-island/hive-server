@@ -227,6 +227,163 @@ func TestTodoReorder_NotFound(t *testing.T) {
 	}
 }
 
+func TestTodoGet(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	r1 := request(t, srv, http.MethodPost, "/api/v1/todos", map[string]any{"title": "fetch me"}, testToken, testAgentDragon)
+	var created model.Todo
+	decodeJSON(t, r1, &created)
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/todos/"+created.ID, nil, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var todo model.Todo
+	decodeJSON(t, resp, &todo)
+	if todo.ID != created.ID {
+		t.Errorf("ID = %q, want %q", todo.ID, created.ID)
+	}
+}
+
+func TestTodoGet_NotFound(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/todos/no-such-id", nil, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoGet_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetTodo", errTest)
+
+	resp := request(t, srv, http.MethodGet, "/api/v1/todos/some-id", nil, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoUpdate_StoreGetError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetTodo", errTest)
+
+	resp := request(t, srv, http.MethodPatch, "/api/v1/todos/some-id", map[string]any{
+		"title": "fail",
+	}, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoUpdate_StoreUpdateError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+
+	// Create a todo first so the ownership check passes.
+	r1 := request(t, srv, http.MethodPost, "/api/v1/todos", map[string]any{"title": "exists"}, testToken, testAgentDragon)
+	var created model.Todo
+	decodeJSON(t, r1, &created)
+
+	ms.injectErr("UpdateTodo", errTest)
+
+	resp := request(t, srv, http.MethodPatch, "/api/v1/todos/"+created.ID, map[string]any{
+		"title": "fail",
+	}, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoDelete_StoreGetError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GetTodo", errTest)
+
+	resp := request(t, srv, http.MethodDelete, "/api/v1/todos/some-id", nil, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoDelete_StoreDeleteError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+
+	// Create a todo first so the ownership check passes.
+	r1 := request(t, srv, http.MethodPost, "/api/v1/todos", map[string]any{"title": "exists"}, testToken, testAgentDragon)
+	var created model.Todo
+	decodeJSON(t, r1, &created)
+
+	ms.injectErr("DeleteTodo", errTest)
+
+	resp := request(t, srv, http.MethodDelete, "/api/v1/todos/"+created.ID, nil, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoPruneDone_MissingAgentID(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	resp := request(t, srv, http.MethodDelete, "/api/v1/todos/done", nil, testToken, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoPruneDone_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("PruneDoneTodos", errTest)
+
+	resp := request(t, srv, http.MethodDelete, "/api/v1/todos/done", nil, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoReorder_MissingAgentID(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	resp := request(t, srv, http.MethodPost, "/api/v1/todos/reorder", map[string]any{
+		"ids": []string{"a"},
+	}, testToken, "")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", resp.StatusCode)
+	}
+}
+
+func TestTodoReorder_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("ReorderTodos", errTest)
+
+	resp := request(t, srv, http.MethodPost, "/api/v1/todos/reorder", map[string]any{
+		"ids": []string{"a"},
+	}, testToken, testAgentDragon)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
 func TestTodoCreate_StoreError(t *testing.T) {
 	srv, ms := newMockServerWithStore(t, testToken)
 	ms.injectErr("CreateTodo", errTest)
