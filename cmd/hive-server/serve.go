@@ -55,13 +55,17 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	onlyClawsURL := os.Getenv("ONLY_CLAWS_URL")
 	onlyClawsToken := os.Getenv("ONLY_CLAWS_TOKEN")
 
+	// Read GitHub webhook secret from environment.
+	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
+
 	// Create server configuration.
 	cfg := server.Config{
-		BindAddr:       bind,
-		DatabaseURL:    dbURL,
-		Token:          token,
-		OnlyClawsURL:   onlyClawsURL,
-		OnlyClawsToken: onlyClawsToken,
+		BindAddr:            bind,
+		DatabaseURL:         dbURL,
+		Token:               token,
+		OnlyClawsURL:        onlyClawsURL,
+		OnlyClawsToken:      onlyClawsToken,
+		GitHubWebhookSecret: githubWebhookSecret,
 	}
 
 	// Create and run server.

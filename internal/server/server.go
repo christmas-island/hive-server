@@ -11,6 +11,7 @@ import (
 	"github.com/christmas-island/hive-server/internal/log"
 	"github.com/christmas-island/hive-server/internal/relay"
 	"github.com/christmas-island/hive-server/internal/store"
+	"github.com/christmas-island/hive-server/internal/webhook"
 )
 
 // Server manages the HTTP server lifecycle.
@@ -57,13 +58,18 @@ func runClaimExpiry(ctx context.Context, ce claimExpirer) {
 }
 
 // buildMux creates the top-level HTTP mux with health probes, version endpoint,
-// and the API handler.
-func buildMux(st *store.Store, token string, rc *relay.Client) http.Handler {
+// the API handler, and the GitHub webhook endpoint.
+func buildMux(st *store.Store, token string, rc *relay.Client, webhookSecret string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /ready", handleReady)
 	mux.HandleFunc("GET /version", handleVersion)
 	mux.Handle("GET /healthz", healthzHandler(st))
+
+	// GitHub webhook endpoint — bypasses Bearer auth (uses HMAC signature validation).
+	wh := webhook.New(webhookSecret, st)
+	mux.Handle("POST /api/v1/webhooks/github", wh)
+
 	mux.Handle("/", handlers.New(st, token, rc))
 
 	// Wrap the entire mux with version header middleware
@@ -100,7 +106,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Build top-level mux: health probes bypass auth, everything else goes to
 	// the API handler (which owns auth middleware and Huma routing).
-	handler := buildMux(s.store, s.config.Token, rc)
+	handler := buildMux(s.store, s.config.Token, rc, s.config.GitHubWebhookSecret)
 
 	s.srv = &http.Server{
 		Addr:         s.config.BindAddr,

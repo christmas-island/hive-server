@@ -177,7 +177,7 @@ func TestRunClaimExpiry_TickerPath_Success(t *testing.T) {
 
 func TestBuildMux(t *testing.T) {
 	// buildMux should return a valid mux that routes /version correctly.
-	mux := buildMux(nil, "", nil)
+	mux := buildMux(nil, "", nil, "")
 	if mux == nil {
 		t.Fatal("buildMux returned nil")
 	}
