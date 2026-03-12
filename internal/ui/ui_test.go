@@ -80,7 +80,7 @@ func newMockUI() *ui.UI {
 func TestUI_Routes(t *testing.T) {
 	handler := newMockUI()
 	router := handler.Routes()
-	
+
 	// Test routes exist and return expected status codes
 	testCases := []struct {
 		method       string
@@ -99,9 +99,9 @@ func TestUI_Routes(t *testing.T) {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			w := httptest.NewRecorder()
-			
+
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tc.expectedCode {
 				t.Errorf("expected status %d, got %d", tc.expectedCode, w.Code)
 			}
@@ -112,13 +112,13 @@ func TestUI_Routes(t *testing.T) {
 func TestUI_StaticFiles(t *testing.T) {
 	handler := newMockUI()
 	router := handler.Routes()
-	
+
 	// Test that static files are served
 	req := httptest.NewRequest(http.MethodGet, "/static/style.css", nil)
 	w := httptest.NewRecorder()
-	
+
 	router.ServeHTTP(w, req)
-	
+
 	// Should return 200 if file exists, or 404 if it doesn't (both are valid responses)
 	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
 		t.Errorf("expected status 200 or 404, got %d", w.Code)
@@ -129,12 +129,12 @@ func TestUI_AuthMiddleware_NoToken(t *testing.T) {
 	// Test with no token configured (should allow access)
 	handler := ui.New(&mockStore{}, "")
 	router := handler.Routes()
-	
+
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
-	
+
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}
@@ -144,24 +144,24 @@ func TestUI_AuthMiddleware_WithToken(t *testing.T) {
 	// Test with token configured
 	handler := ui.New(&mockStore{}, "secret")
 	router := handler.Routes()
-	
+
 	// Request without token should be unauthorized
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
-	
+
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected status 401, got %d", w.Code)
 	}
-	
+
 	// Request with correct token should succeed
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	w = httptest.NewRecorder()
-	
+
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
 	}

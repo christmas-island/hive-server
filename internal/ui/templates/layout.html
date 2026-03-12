@@ -41,7 +41,7 @@
         const currentPath = window.location.pathname;
         const links = document.querySelectorAll('.nav-link');
         links.forEach(link => {
-            if (link.getAttribute('href') === currentPath || 
+            if (link.getAttribute('href') === currentPath ||
                 (currentPath === '/ui/' && link.getAttribute('href') === '/ui/')) {
                 link.classList.add('nav-active');
             }

@@ -108,7 +108,7 @@ func (ui *UI) authMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error":   "unauthorized", 
+				"error":   "unauthorized",
 				"message": "invalid or missing bearer token",
 			})
 			return

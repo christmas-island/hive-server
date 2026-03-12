@@ -11,22 +11,22 @@
     <form method="GET" action="/ui/memory" class="flex flex-wrap gap-4">
         <div class="flex flex-col">
             <label for="agent" class="text-sm font-medium text-slate-300 mb-1">Agent</label>
-            <input type="text" name="agent" id="agent" value="{{.Filter.Agent}}" 
+            <input type="text" name="agent" id="agent" value="{{.Filter.Agent}}"
                    placeholder="Agent ID" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex flex-col">
             <label for="prefix" class="text-sm font-medium text-slate-300 mb-1">Key Prefix</label>
-            <input type="text" name="prefix" id="prefix" value="{{.Filter.Prefix}}" 
+            <input type="text" name="prefix" id="prefix" value="{{.Filter.Prefix}}"
                    placeholder="e.g., /tasks/" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex flex-col">
             <label for="tag" class="text-sm font-medium text-slate-300 mb-1">Tag</label>
-            <input type="text" name="tag" id="tag" value="{{.Filter.Tag}}" 
+            <input type="text" name="tag" id="tag" value="{{.Filter.Tag}}"
                    placeholder="Tag name" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex flex-col">
             <label for="limit" class="text-sm font-medium text-slate-300 mb-1">Limit</label>
-            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}50{{end}}" 
+            <input type="number" name="limit" id="limit" value="{{if .Filter.Limit}}{{.Filter.Limit}}{{else}}50{{end}}"
                    min="1" max="500" class="px-3 py-2 bg-slate-800 border border-slate-600 rounded text-slate-200">
         </div>
         <div class="flex items-end">
