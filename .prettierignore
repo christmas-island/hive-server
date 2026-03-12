@@ -1,0 +1,2 @@
+# Exclude Go template files from Prettier formatting
+internal/ui/templates/
