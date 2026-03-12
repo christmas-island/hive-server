@@ -200,7 +200,7 @@ func TestHeartbeat_Success(t *testing.T) {
 		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
-	got, err := s.Heartbeat(context.Background(), "agent1", []string{"tasks"}, model.AgentStatusOnline, "", "")
+	got, err := s.Heartbeat(context.Background(), "agent1", []string{"tasks"}, model.AgentStatusOnline, "", "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestHeartbeat_NilCapabilities(t *testing.T) {
 		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
 	)).WithArgs("a2").WillReturnRows(rows)
 
-	got, err := s.Heartbeat(context.Background(), "a2", nil, model.AgentStatusOnline, "", "")
+	got, err := s.Heartbeat(context.Background(), "a2", nil, model.AgentStatusOnline, "", "", "")
 	if err != nil {
 		t.Fatalf("Heartbeat with nil caps: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestHeartbeat_ExecError(t *testing.T) {
 	)).WillReturnError(dbErr)
 	mock.ExpectRollback()
 
-	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline, "", "")
+	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline, "", "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -275,7 +275,7 @@ func TestHeartbeat_GetAgentNotFound(t *testing.T) {
 		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
 	)).WithArgs("agent1").WillReturnRows(rows)
 
-	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline, "", "")
+	_, err := s.Heartbeat(context.Background(), "agent1", []string{}, model.AgentStatusOnline, "", "", "")
 	if !errors.Is(err, model.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -297,7 +297,7 @@ func TestHeartbeat_SQLMatchesSource(t *testing.T) {
 		AddRow("x", "x", "online", "", `[]`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "", "", "token-x")
 	mock.ExpectQuery(`SELECT id, name`).WithArgs("x").WillReturnRows(rows)
 
-	_, err := s.Heartbeat(context.Background(), "x", []string{}, model.AgentStatusOnline, "", "")
+	_, err := s.Heartbeat(context.Background(), "x", []string{}, model.AgentStatusOnline, "", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestGetAgent_CapabilitiesNullJSON(t *testing.T) {
 
 	now := time.Now().UTC()
 	rows := sqlmock.NewRows([]string{"id", "name", "status", "activity", "capabilities", "last_heartbeat", "registered_at", "hive_local_version", "hive_plugin_version", "token"}).
-		AddRow("agent1", "Agent One", "online", `null`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "", "", "token-agent1")
+		AddRow("agent1", "Agent One", "online", "", `null`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), "", "", "token-agent1")
 
 	mock.ExpectQuery(regexp.QuoteMeta(
 		`SELECT id, name, status, activity, capabilities, last_heartbeat, registered_at, hive_local_version, hive_plugin_version, token FROM agents WHERE id = $1`,
