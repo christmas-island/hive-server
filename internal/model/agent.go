@@ -22,5 +22,5 @@ type Agent struct {
 	RegisteredAt      time.Time   `json:"registered_at"`
 	HiveLocalVersion  string      `json:"hive_local_version,omitempty"`  // semver reported by hive-local
 	HivePluginVersion string      `json:"hive_plugin_version,omitempty"` // semver reported by hive plugin
-	Token             string      `json:"token,omitempty"`               // per-agent bearer token (only returned on onboard)
+	Token             string      `json:"-"`                              // per-agent bearer token (only returned on onboard)
 }
