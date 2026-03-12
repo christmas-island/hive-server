@@ -27,6 +27,7 @@ type mockStore struct {
 	// claimQueue holds per-resource FIFO queues of waiters.
 	claimQueue map[string][]*model.ClaimWaiter
 	sessions   map[string]*model.CapturedSession
+	todos      map[string]*model.Todo
 
 	// forceErr maps a method name to an error that will be returned on the
 	// next call (consumed once). Use injectErr to set it.
@@ -50,6 +51,7 @@ func newMockStore() *mockStore {
 		roles:           make(map[string]*model.DiscoveryRole),
 		claims:          make(map[string]*model.Claim),
 		claimQueue:      make(map[string][]*model.ClaimWaiter),
+		todos:           make(map[string]*model.Todo),
 		forceErr:        make(map[string]error),
 	}
 }
@@ -831,6 +833,20 @@ func copyAgent(a *model.Agent) *model.Agent {
 	}
 }
 
+func copyTodo(t *model.Todo) *model.Todo {
+	return &model.Todo{
+		ID:         t.ID,
+		AgentID:    t.AgentID,
+		Title:      t.Title,
+		Status:     t.Status,
+		SortOrder:  t.SortOrder,
+		ParentTask: t.ParentTask,
+		Context:    t.Context,
+		CreatedAt:  t.CreatedAt,
+		UpdatedAt:  t.UpdatedAt,
+	}
+}
+
 func copyClaim(c *model.Claim) *model.Claim {
 	meta := make(map[string]string, len(c.Metadata))
 	for k, v := range c.Metadata {
@@ -891,6 +907,141 @@ func (m *mockStore) GetCapturedSession(_ context.Context, id string) (*model.Cap
 		return nil, model.ErrNotFound
 	}
 	return cs, nil
+}
+
+// --- Todos ---
+
+func (m *mockStore) CreateTodo(_ context.Context, t *model.Todo) (*model.Todo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("CreateTodo"); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	todo := &model.Todo{
+		ID:         uuid.New().String(),
+		AgentID:    t.AgentID,
+		Title:      t.Title,
+		Status:     model.TodoStatusPending,
+		SortOrder:  t.SortOrder,
+		ParentTask: t.ParentTask,
+		Context:    t.Context,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	m.todos[todo.ID] = todo
+	return copyTodo(todo), nil
+}
+
+func (m *mockStore) GetTodo(_ context.Context, id string) (*model.Todo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("GetTodo"); err != nil {
+		return nil, err
+	}
+	t, ok := m.todos[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	return copyTodo(t), nil
+}
+
+func (m *mockStore) ListTodos(_ context.Context, f model.TodoFilter) ([]*model.Todo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("ListTodos"); err != nil {
+		return nil, err
+	}
+	var result []*model.Todo
+	for _, t := range m.todos {
+		if f.AgentID != "" && t.AgentID != f.AgentID {
+			continue
+		}
+		if f.Status != "" && string(t.Status) != f.Status {
+			continue
+		}
+		result = append(result, copyTodo(t))
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (m *mockStore) UpdateTodo(_ context.Context, id string, upd model.TodoUpdate) (*model.Todo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("UpdateTodo"); err != nil {
+		return nil, err
+	}
+	t, ok := m.todos[id]
+	if !ok {
+		return nil, model.ErrNotFound
+	}
+	if upd.Title != nil {
+		t.Title = *upd.Title
+	}
+	if upd.Status != nil {
+		t.Status = *upd.Status
+	}
+	if upd.Context != nil {
+		t.Context = *upd.Context
+	}
+	t.UpdatedAt = time.Now().UTC()
+	return copyTodo(t), nil
+}
+
+func (m *mockStore) DeleteTodo(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("DeleteTodo"); err != nil {
+		return err
+	}
+	if _, ok := m.todos[id]; !ok {
+		return model.ErrNotFound
+	}
+	delete(m.todos, id)
+	return nil
+}
+
+func (m *mockStore) PruneDoneTodos(_ context.Context, agentID string, _ time.Duration) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("PruneDoneTodos"); err != nil {
+		return 0, err
+	}
+	var count int64
+	for id, t := range m.todos {
+		if agentID != "" && t.AgentID != agentID {
+			continue
+		}
+		if t.Status == model.TodoStatusDone || t.Status == model.TodoStatusSkipped || t.Status == model.TodoStatusCancelled {
+			delete(m.todos, id)
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (m *mockStore) ReorderTodos(_ context.Context, agentID string, ids []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.consumeErr("ReorderTodos"); err != nil {
+		return err
+	}
+	for i, id := range ids {
+		t, ok := m.todos[id]
+		if !ok || t.AgentID != agentID {
+			return model.ErrNotFound
+		}
+		t.SortOrder = i
+		t.UpdatedAt = time.Now().UTC()
+	}
+	return nil
 }
 
 func (m *mockStore) ListCapturedSessions(_ context.Context, f model.SessionFilter) ([]*model.CapturedSession, error) {

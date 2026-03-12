@@ -55,6 +55,14 @@ type Store interface {
 	UpsertAgentMeta(ctx context.Context, id string, meta *model.DiscoveryAgentMeta) (*model.DiscoveryAgent, error)
 	GetDiscoveryAgent(ctx context.Context, id string) (*model.DiscoveryAgent, error)
 	ListDiscoveryAgents(ctx context.Context) ([]*model.DiscoveryAgent, error)
+	// Todos
+	CreateTodo(ctx context.Context, t *model.Todo) (*model.Todo, error)
+	GetTodo(ctx context.Context, id string) (*model.Todo, error)
+	ListTodos(ctx context.Context, f model.TodoFilter) ([]*model.Todo, error)
+	UpdateTodo(ctx context.Context, id string, upd model.TodoUpdate) (*model.Todo, error)
+	DeleteTodo(ctx context.Context, id string) error
+	PruneDoneTodos(ctx context.Context, agentID string, maxAge time.Duration) (int64, error)
+	ReorderTodos(ctx context.Context, agentID string, ids []string) error
 	// Session capture
 	CreateCapturedSession(ctx context.Context, s *model.CapturedSession) (*model.CapturedSession, error)
 	GetCapturedSession(ctx context.Context, id string) (*model.CapturedSession, error)
@@ -97,6 +105,7 @@ func (a *API) routes() http.Handler {
 		registerDiscovery(a, api)
 		registerClaims(a, api)
 		registerSessions(a, api)
+		registerTodos(a, api)
 	})
 
 	return r
