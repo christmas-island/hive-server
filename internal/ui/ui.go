@@ -36,25 +36,45 @@ type Store interface {
 type UI struct {
 	store Store
 	token string
-	tmpl  *template.Template
+	pages map[string]*template.Template
 }
 
 // New creates a new UI handler
 func New(store Store, token string) *UI {
-	// Parse templates with helper functions
-	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"timeAgo": timeAgo,
-		"formatTime": formatTime,
-		"truncate": truncate,
-		"statusClass": statusClass,
-		"now": time.Now,
-	}).ParseFS(templateFS, "templates/*.html"))
-
-	return &UI{
+	ui := &UI{
 		store: store,
 		token: token,
-		tmpl:  tmpl,
+		pages: make(map[string]*template.Template),
 	}
+
+	// Helper functions for templates
+	funcMap := template.FuncMap{
+		"timeAgo":     timeAgo,
+		"formatTime":  formatTime,
+		"truncate":    truncate,
+		"statusClass": statusClass,
+		"now":         time.Now,
+	}
+
+	// Pre-parse templates for each page to avoid "content" block overwrite issues
+	// when multiple templates are parsed into the same set.
+	pageTemplates := []string{
+		"dashboard.html",
+		"agents.html",
+		"tasks.html",
+		"claims.html",
+		"memory.html",
+		"sessions.html",
+	}
+
+	for _, page := range pageTemplates {
+		tmpl := template.New(page).Funcs(funcMap)
+		// Parse layout first, then the specific page
+		tmpl = template.Must(tmpl.ParseFS(templateFS, "templates/layout.html", "templates/"+page))
+		ui.pages[page] = tmpl
+	}
+
+	return ui
 }
 
 // Routes sets up the UI routes
@@ -76,6 +96,19 @@ func (ui *UI) Routes() chi.Router {
 	r.Get("/sessions", ui.sessions)
 
 	return r
+}
+
+// render is a helper to execute the correct page template
+func (ui *UI) render(w http.ResponseWriter, page string, data interface{}) {
+	tmpl, ok := ui.pages[page]
+	if !ok {
+		http.Error(w, "Template not found", http.StatusNotFound)
+		return
+	}
+
+	if err := tmpl.ExecuteTemplate(w, page, data); err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // authMiddleware validates the Bearer token (same logic as API handlers)
@@ -177,9 +210,7 @@ func (ui *UI) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := ui.tmpl.ExecuteTemplate(w, "dashboard.html", data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
+	ui.render(w, "dashboard.html", data)
 }
 
 // agents shows the agents list
@@ -200,9 +231,7 @@ func (ui *UI) agents(w http.ResponseWriter, r *http.Request) {
 		Agents: agents,
 	}
 
-	if err := ui.tmpl.ExecuteTemplate(w, "agents.html", data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
+	ui.render(w, "agents.html", data)
 }
 
 // tasks shows the task list
@@ -245,9 +274,7 @@ func (ui *UI) tasks(w http.ResponseWriter, r *http.Request) {
 		Filter: filter,
 	}
 
-	if err := ui.tmpl.ExecuteTemplate(w, "tasks.html", data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
+	ui.render(w, "tasks.html", data)
 }
 
 // claims shows the claims list
@@ -287,9 +314,7 @@ func (ui *UI) claims(w http.ResponseWriter, r *http.Request) {
 		Filter: filter,
 	}
 
-	if err := ui.tmpl.ExecuteTemplate(w, "claims.html", data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
+	ui.render(w, "claims.html", data)
 }
 
 // memory shows the memory entries list
@@ -332,9 +357,7 @@ func (ui *UI) memory(w http.ResponseWriter, r *http.Request) {
 		Filter: filter,
 	}
 
-	if err := ui.tmpl.ExecuteTemplate(w, "memory.html", data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
+	ui.render(w, "memory.html", data)
 }
 
 // sessions shows the captured sessions list
@@ -374,9 +397,7 @@ func (ui *UI) sessions(w http.ResponseWriter, r *http.Request) {
 		Filter:   filter,
 	}
 
-	if err := ui.tmpl.ExecuteTemplate(w, "sessions.html", data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
-	}
+	ui.render(w, "sessions.html", data)
 }
 
 // Helper functions for templates
