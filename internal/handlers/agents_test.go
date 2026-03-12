@@ -229,3 +229,71 @@ func TestAgentUsage_WithRelay(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestAgentOnboard(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	resp := request(t, srv, http.MethodPost, "/api/v1/agents/new-claw/onboard", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Agent struct {
+			ID    string `json:"id"`
+			Token string `json:"token"`
+		} `json:"agent"`
+		Token string `json:"token"`
+	}
+	decodeJSON(t, resp, &result)
+
+	if result.Agent.ID != "new-claw" {
+		t.Errorf("agent.id = %q, want new-claw", result.Agent.ID)
+	}
+	if result.Token == "" {
+		t.Error("expected non-empty token in response")
+	}
+	// Token must NOT be exposed in the nested agent object
+	if result.Agent.Token != "" {
+		t.Errorf("agent.token should be empty in response, got %q", result.Agent.Token)
+	}
+}
+
+func TestAgentOnboard_ExistingAgent(t *testing.T) {
+	srv := newMockServerWithToken(t, testToken)
+
+	// Register agent first
+	request(t, srv, http.MethodPost, "/api/v1/agents/existing-claw/heartbeat", map[string]any{
+		"status": "online",
+	}, testToken, testAgent).Body.Close()
+
+	// Onboard should succeed and return a token
+	resp := request(t, srv, http.MethodPost, "/api/v1/agents/existing-claw/onboard", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Agent struct{ ID string `json:"id"` } `json:"agent"`
+		Token string                          `json:"token"`
+	}
+	decodeJSON(t, resp, &result)
+	if result.Agent.ID != "existing-claw" {
+		t.Errorf("agent.id = %q, want existing-claw", result.Agent.ID)
+	}
+	if result.Token == "" {
+		t.Error("expected non-empty token")
+	}
+}
+
+func TestAgentOnboard_StoreError(t *testing.T) {
+	srv, ms := newMockServerWithStore(t, testToken)
+	ms.injectErr("GenerateAgentToken", errTest)
+	resp := request(t, srv, http.MethodPost, "/api/v1/agents/err-claw/onboard", nil, testToken, testAgent)
+	defer resp.Body.Close()
+	if resp.StatusCode < 400 {
+		t.Errorf("expected error status, got %d", resp.StatusCode)
+	}
+}
