@@ -105,7 +105,27 @@ func TestTaskLifecycle(t *testing.T) {
 		t.Errorf("notes after second: want 2, got %d", len(noted.Notes))
 	}
 
-	// Complete it (claimed → done).
+	// Move to in_progress (claimed → in_progress).
+	ipBody := map[string]any{
+		"status": "in_progress",
+		"note":   "working on it",
+	}
+	status, body, err = cli.do("PATCH", "/api/v1/tasks/"+taskID, ipBody, agentID(aid))
+	if err != nil {
+		t.Fatalf("in_progress: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("in_progress: want 200, got %d (%s)", status, body)
+	}
+	ip, err := decode[taskResp](body)
+	if err != nil {
+		t.Fatalf("decode in_progress: %v", err)
+	}
+	if ip.Status != "in_progress" {
+		t.Errorf("in_progress status: want in_progress, got %s", ip.Status)
+	}
+
+	// Complete it (in_progress → done).
 	doneBody := map[string]any{
 		"status": "done",
 		"note":   "finished",
@@ -124,8 +144,8 @@ func TestTaskLifecycle(t *testing.T) {
 	if done.Status != "done" {
 		t.Errorf("done status: want done, got %s", done.Status)
 	}
-	if len(done.Notes) != 3 {
-		t.Errorf("final notes: want 3, got %d", len(done.Notes))
+	if len(done.Notes) != 4 {
+		t.Errorf("final notes: want 4, got %d", len(done.Notes))
 	}
 
 	// Delete.
