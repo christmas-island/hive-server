@@ -36,20 +36,20 @@ func TestNewTestServer_MemoryCRUD(t *testing.T) {
 
 	client := &http.Client{}
 
-	// POST a memory entry.
+	// POST a memory entry (upsert via POST /api/v1/memory).
 	body := `{"key":"greeting","value":"hello world","tags":["test"]}`
-	req, _ := http.NewRequest(http.MethodPut, baseURL+"/api/v1/memory/greeting", strings.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/memory", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-Agent-ID", "test-agent")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("PUT memory: %v", err)
+		t.Fatalf("POST memory: %v", err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT memory: status %d, want 200", resp.StatusCode)
+		t.Fatalf("POST memory: status %d, want 200", resp.StatusCode)
 	}
 
 	// GET it back.

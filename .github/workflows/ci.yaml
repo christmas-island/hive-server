@@ -63,7 +63,27 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: git diff "origin/${BASE_REF}...HEAD" > pr.diff
+        run: |
+          # Generate diff excluding integration-tagged Go files.
+          # Files with //go:build integration are only compiled under -tags
+          # integration and won't appear in unit coverage profiles, so
+          # including them in diff coverage would always fail the gate.
+          git diff "origin/${BASE_REF}...HEAD" > pr-full.diff
+
+          # Build pathspec excludes for integration-tagged files.
+          excludes=()
+          while IFS= read -r f; do
+            if [ -f "$f" ] && head -1 "$f" | grep -q '//go:build integration'; then
+              excludes+=(":!${f}")
+              echo "Excluding from diff coverage: $f"
+            fi
+          done < <(git diff "origin/${BASE_REF}...HEAD" --name-only -- '*.go')
+
+          if [ ${#excludes[@]} -gt 0 ]; then
+            git diff "origin/${BASE_REF}...HEAD" -- . "${excludes[@]}" > pr.diff
+          else
+            cp pr-full.diff pr.diff
+          fi
       - name: Run diff coverage check
         id: diff-coverage
         if: github.event_name == 'pull_request'
