@@ -4,6 +4,7 @@ package integration
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/christmas-island/hive-server/pkg/testharness"
@@ -80,7 +81,7 @@ func TestClaimAcquireRelease(t *testing.T) {
 	}
 
 	// List claims — should find ours.
-	status, body, err = cli.do("GET", "/api/v1/claims?resource="+resource, nil)
+	status, body, err = cli.do("GET", "/api/v1/claims?resource="+url.QueryEscape(resource), nil)
 	if err != nil {
 		t.Fatalf("list claims: %v", err)
 	}
@@ -102,26 +103,22 @@ func TestClaimAcquireRelease(t *testing.T) {
 		t.Errorf("claim %s not found in list (%d claims)", claimID, len(claims))
 	}
 
-	// Release claim.
-	status, _, err = cli.do("DELETE", "/api/v1/claims/"+claimID, nil)
+	// Release claim — DELETE returns 200 with release result.
+	status, body, err = cli.do("DELETE", "/api/v1/claims/"+claimID, nil)
 	if err != nil {
 		t.Fatalf("release claim: %v", err)
 	}
-	if status != http.StatusNoContent {
-		t.Fatalf("release claim: want 204, got %d", status)
+	if status != http.StatusOK {
+		t.Fatalf("release claim: want 200, got %d", status)
 	}
 	t.Logf("released claim %s", claimID)
 
-	// Verify claim is released.
+	// Verify claim is released via GET.
 	status, body, err = cli.do("GET", "/api/v1/claims/"+claimID, nil)
 	if err != nil {
 		t.Fatalf("get released: %v", err)
 	}
-	if status != http.StatusOK {
-		// Claim might still be visible with released status, or 404 — depends on implementation.
-		// If 200, check status is "released".
-		t.Logf("released claim returned %d (may be 404 if pruned)", status)
-	} else {
+	if status == http.StatusOK {
 		released, err := decode[claimResp](body)
 		if err != nil {
 			t.Fatalf("decode released: %v", err)
@@ -129,6 +126,9 @@ func TestClaimAcquireRelease(t *testing.T) {
 		if released.Status != "released" {
 			t.Errorf("released status: want released, got %s", released.Status)
 		}
+	} else if status != http.StatusNotFound {
+		// Either 200 (released) or 404 (pruned) is acceptable.
+		t.Errorf("get released: want 200 or 404, got %d", status)
 	}
 }
 
@@ -181,13 +181,13 @@ func TestClaimContention(t *testing.T) {
 	}
 	t.Logf("agent-b queued (waiter %s, position %v)", claimB.WaiterID, claimB.Position)
 
-	// Release agent A's claim.
+	// Release agent A's claim — DELETE returns 200 with release result.
 	status, _, err = cli.do("DELETE", "/api/v1/claims/"+claimA.ID, nil)
 	if err != nil {
 		t.Fatalf("release agent-a: %v", err)
 	}
-	if status != http.StatusNoContent {
-		t.Fatalf("release agent-a: want 204, got %d", status)
+	if status != http.StatusOK {
+		t.Fatalf("release agent-a: want 200, got %d", status)
 	}
 	t.Log("agent-a released, agent-b should be promotable")
 }
