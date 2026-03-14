@@ -58,7 +58,7 @@ func (a *API) memoryUpsert(ctx context.Context, input *memoryUpsertInput) (*memo
 		AgentID:        input.XAgentID,
 		Tags:           input.Body.Tags,
 		Version:        input.Body.Version,
-		SessionContext: sessionFromCtx(ctx),
+		SessionContext: model.SessionFromCtx(ctx),
 	}
 
 	result, err := a.store.UpsertMemory(ctx, entry)

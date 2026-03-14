@@ -11,16 +11,19 @@ import (
 
 	"github.com/christmas-island/hive-server/internal/handlers"
 	"github.com/christmas-island/hive-server/internal/relay"
+	"github.com/christmas-island/hive-server/internal/server"
 )
 
 // errTest is a sentinel error used in store error injection tests.
 var errTest = errors.New("injected test error")
 
 // newMockServerWithToken creates an httptest server backed by an in-memory mockStore
-// with the given bearer token. No database connection required.
+// with the given bearer token. Auth middleware is applied at the server level,
+// matching production layout.
 func newMockServerWithToken(t *testing.T, token string) *httptest.Server {
 	t.Helper()
-	h := handlers.New(newMockStore(), token, nil)
+	ms := newMockStore()
+	h := wrapWithAuth(handlers.New(ms, nil), token, ms)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv
@@ -31,7 +34,7 @@ func newMockServerWithToken(t *testing.T, token string) *httptest.Server {
 func newMockServerWithStore(t *testing.T, token string) (*httptest.Server, *mockStore) {
 	t.Helper()
 	ms := newMockStore()
-	h := handlers.New(ms, token, nil)
+	h := wrapWithAuth(handlers.New(ms, nil), token, ms)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv, ms
@@ -40,11 +43,18 @@ func newMockServerWithStore(t *testing.T, token string) (*httptest.Server, *mock
 // newMockServerWithRelay creates an httptest server with both a mock store and a relay client.
 func newMockServerWithRelay(t *testing.T, token string, relayURL string) *httptest.Server {
 	t.Helper()
+	ms := newMockStore()
 	rc := relay.New(relayURL, "relay-token")
-	h := handlers.New(newMockStore(), token, rc)
+	h := wrapWithAuth(handlers.New(ms, rc), token, ms)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// wrapWithAuth applies the server-level auth middleware around a handler,
+// matching the production mux layout.
+func wrapWithAuth(handler http.Handler, token string, agents server.AgentLookup) http.Handler {
+	return server.AuthMiddleware(token, agents)(handler)
 }
 
 // request is a helper to make HTTP requests to the test server.

@@ -99,11 +99,15 @@ func BuildMux(st *store.Store, token string, rc *relay.Client, webhookSecret str
 	wh := webhook.New(webhookSecret, st)
 	mux.Handle("POST /api/v1/webhooks/github", wh)
 
-	// Web UI — with same auth middleware as API
-	uiHandler := ui.New(st, token)
-	mux.Handle("/ui/", http.StripPrefix("/ui", uiHandler.Routes()))
+	// Everything below requires auth.
+	authed := http.NewServeMux()
 
-	mux.Handle("/", handlers.New(st, token, rc))
+	uiHandler := ui.New(st)
+	authed.Handle("/ui/", http.StripPrefix("/ui", uiHandler.Routes()))
+
+	authed.Handle("/", handlers.New(st, rc))
+
+	mux.Handle("/", AuthMiddleware(token, st)(authed))
 
 	// Wrap the entire mux with version header middleware
 	return versionHeaderMiddleware(mux)

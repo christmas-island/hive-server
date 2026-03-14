@@ -46,10 +46,6 @@ func (m *mockStore) ListAgents(_ context.Context) ([]*model.Agent, error) {
 	}, nil
 }
 
-func (m *mockStore) GetAgent(_ context.Context, id string) (*model.Agent, error) {
-	return &model.Agent{ID: id}, nil
-}
-
 func (m *mockStore) ListClaims(_ context.Context, _ model.ClaimFilter) ([]*model.Claim, error) {
 	if m.failOn == "ListClaims" {
 		return nil, errors.New("mock error")
@@ -74,7 +70,7 @@ func (m *mockStore) ListCapturedSessions(_ context.Context, _ model.SessionFilte
 
 // newMockUI creates a UI handler with mock store for testing
 func newMockUI() *ui.UI {
-	return ui.New(&mockStore{}, "")
+	return ui.New(&mockStore{})
 }
 
 func TestUI_Routes(t *testing.T) {
@@ -124,48 +120,6 @@ func TestUI_StaticFiles(t *testing.T) {
 	}
 }
 
-func TestUI_AuthMiddleware_NoToken(t *testing.T) {
-	// Test with no token configured (should allow access)
-	handler := ui.New(&mockStore{}, "")
-	router := handler.Routes()
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-}
-
-func TestUI_AuthMiddleware_WithToken(t *testing.T) {
-	// Test with token configured
-	handler := ui.New(&mockStore{}, "secret")
-	router := handler.Routes()
-
-	// Request without token should be unauthorized
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", w.Code)
-	}
-
-	// Request with correct token should succeed
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer secret")
-	w = httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-}
-
 func TestUI_TemplateRendering(t *testing.T) {
 	handler := newMockUI()
 	router := handler.Routes()
@@ -191,7 +145,7 @@ func TestUI_TemplateRendering(t *testing.T) {
 
 func TestUI_DashboardError(t *testing.T) {
 	store := &mockStore{failOn: "ListAgents"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -205,7 +159,7 @@ func TestUI_DashboardError(t *testing.T) {
 
 func TestUI_DashboardTasksError(t *testing.T) {
 	store := &mockStore{failOn: "ListTasks"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -219,7 +173,7 @@ func TestUI_DashboardTasksError(t *testing.T) {
 
 func TestUI_DashboardClaimsError(t *testing.T) {
 	store := &mockStore{failOn: "ListClaims"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -233,7 +187,7 @@ func TestUI_DashboardClaimsError(t *testing.T) {
 
 func TestUI_DashboardMemoryError(t *testing.T) {
 	store := &mockStore{failOn: "ListMemory"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -247,7 +201,7 @@ func TestUI_DashboardMemoryError(t *testing.T) {
 
 func TestUI_AgentsError(t *testing.T) {
 	store := &mockStore{failOn: "ListAgents"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/agents", nil)
@@ -261,7 +215,7 @@ func TestUI_AgentsError(t *testing.T) {
 
 func TestUI_TasksError(t *testing.T) {
 	store := &mockStore{failOn: "ListTasks"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
@@ -275,7 +229,7 @@ func TestUI_TasksError(t *testing.T) {
 
 func TestUI_ClaimsError(t *testing.T) {
 	store := &mockStore{failOn: "ListClaims"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/claims", nil)
@@ -289,7 +243,7 @@ func TestUI_ClaimsError(t *testing.T) {
 
 func TestUI_MemoryError(t *testing.T) {
 	store := &mockStore{failOn: "ListMemory"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/memory", nil)
@@ -303,7 +257,7 @@ func TestUI_MemoryError(t *testing.T) {
 
 func TestUI_SessionsError(t *testing.T) {
 	store := &mockStore{failOn: "ListCapturedSessions"}
-	handler := ui.New(store, "")
+	handler := ui.New(store)
 	router := handler.Routes()
 
 	req := httptest.NewRequest(http.MethodGet, "/sessions", nil)
@@ -368,7 +322,7 @@ func TestUI_SessionsWithAllFilters(t *testing.T) {
 }
 
 func TestUI_RenderUnknownPage(t *testing.T) {
-	handler := ui.New(&mockStore{}, "")
+	handler := ui.New(&mockStore{})
 	w := httptest.NewRecorder()
 
 	// Call Render with a page name that doesn't exist in the pages map
@@ -376,20 +330,5 @@ func TestUI_RenderUnknownPage(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404 for unknown page, got %d", w.Code)
-	}
-}
-
-func TestUI_AuthMiddleware_WrongToken(t *testing.T) {
-	handler := ui.New(&mockStore{}, "secret")
-	router := handler.Routes()
-
-	// Request with wrong token should be unauthorized
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer wrong")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 with wrong token, got %d", w.Code)
 	}
 }
