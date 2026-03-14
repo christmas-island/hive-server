@@ -70,25 +70,40 @@ jobs:
           # including them in diff coverage would always fail the gate.
           git diff "origin/${BASE_REF}...HEAD" > pr-full.diff
 
-          # Build pathspec excludes for integration-tagged files and
-          # rename-only diffs (where the only change is an exported identifier).
+          # Build pathspec excludes for files that shouldn't count toward
+          # diff coverage:
+          #   1. Integration-tagged files (//go:build integration) — only
+          #      compiled with -tags integration, invisible to unit coverage.
+          #   2. Rename-only files — every added line has a corresponding
+          #      removed line that differs only by identifier casing (e.g.
+          #      buildMux → BuildMux). These have no new logic to cover.
           excludes=()
           while IFS= read -r f; do
             if [ ! -f "$f" ]; then
               continue
             fi
-            # Exclude files tagged //go:build integration (not compiled in unit tests).
+
+            # 1. Integration-tagged files.
             if head -1 "$f" | grep -q '//go:build integration'; then
               excludes+=(":!${f}")
               echo "Excluding (integration-tagged): $f"
               continue
             fi
-            # Exclude files where the only diff is in comment lines or exported
-            # renames (lines starting with +// or +func ... renamed from lowercase).
-            added_code=$(git diff "origin/${BASE_REF}...HEAD" -- "$f" | grep '^+[^+]' | grep -v '^+//' | grep -c '.' || true)
-            if [ "$added_code" -le 1 ]; then
-              excludes+=(":!${f}")
-              echo "Excluding (rename/comment-only, ${added_code} code lines): $f"
+
+            # 2. Rename-only detection: case-fold added/removed lines and
+            #    compare. If they match, the diff is purely identifier casing.
+            added=$(git diff "origin/${BASE_REF}...HEAD" -- "$f" \
+              | grep '^+[^+]' | sed 's/^+//' | sort)
+            removed=$(git diff "origin/${BASE_REF}...HEAD" -- "$f" \
+              | grep '^-[^-]' | sed 's/^-//' | sort)
+            if [ -n "$added" ] && [ -n "$removed" ]; then
+              added_lc=$(echo "$added" | tr '[:upper:]' '[:lower:]')
+              removed_lc=$(echo "$removed" | tr '[:upper:]' '[:lower:]')
+              if [ "$added_lc" = "$removed_lc" ]; then
+                excludes+=(":!${f}")
+                echo "Excluding (rename-only): $f"
+                continue
+              fi
             fi
           done < <(git diff "origin/${BASE_REF}...HEAD" --name-only -- '*.go')
 
