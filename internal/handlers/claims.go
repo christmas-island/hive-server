@@ -106,7 +106,7 @@ func (a *API) claimCreate(ctx context.Context, input *claimCreateInput) (*claimC
 		Resource:       input.Body.Resource,
 		AgentID:        input.XAgentID,
 		Metadata:       input.Body.Metadata,
-		SessionContext: sessionFromCtx(ctx),
+		SessionContext: model.SessionFromCtx(ctx),
 		ExpiresAt:      time.Now().UTC().Add(dur),
 	}
 	result, err := a.store.CreateClaim(ctx, c)
@@ -118,7 +118,7 @@ func (a *API) claimCreate(ctx context.Context, input *claimCreateInput) (*claimC
 			AgentID:        input.XAgentID,
 			Type:           input.Body.Type,
 			Metadata:       input.Body.Metadata,
-			SessionContext: sessionFromCtx(ctx),
+			SessionContext: model.SessionFromCtx(ctx),
 			ExpiresInSec:   expiresInSec,
 		}
 		w, position, qErr := a.store.EnqueueClaim(ctx, waiter)

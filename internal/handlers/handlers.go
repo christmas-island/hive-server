@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -72,13 +71,12 @@ type Store interface {
 // API holds dependencies for all handlers.
 type API struct {
 	store Store
-	token string // HIVE_TOKEN for Bearer auth
 	relay *relay.Client
 }
 
 // New creates a new API and returns a mounted chi router.
-func New(s Store, token string, rc *relay.Client) http.Handler {
-	a := &API{store: s, token: token, relay: rc}
+func New(s Store, rc *relay.Client) http.Handler {
+	a := &API{store: s, relay: rc}
 	return a.routes()
 }
 
@@ -88,10 +86,8 @@ func (a *API) routes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 
-	// Authenticated API group: auth middleware wraps all Huma operations and
-	// the auto-generated OpenAPI docs/schema endpoints.
+	// API group: auth is handled at the mux level in server.go.
 	r.Group(func(r chi.Router) {
-		r.Use(a.authMiddleware)
 		r.Use(timingMiddleware)
 
 		config := huma.DefaultConfig("Hive API", "1.0.0")
@@ -109,75 +105,4 @@ func (a *API) routes() http.Handler {
 	})
 
 	return r
-}
-
-// ctxKey is the context key type for handler values.
-type ctxKey string
-
-const ctxKeyAgentID ctxKey = "agent_id"
-const ctxKeySession ctxKey = "session_context"
-
-// authMiddleware validates the Bearer token and extracts X-Agent-ID and session
-// context headers into context.
-// Supports both global HIVE_TOKEN and per-agent tokens.
-func (a *API) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the bearer token from Authorization header
-		authHeader := r.Header.Get("Authorization")
-		bearerToken := ""
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			bearerToken = authHeader[7:]
-		}
-
-		agentID := r.Header.Get("X-Agent-ID")
-
-		// Check auth: either global token or per-agent token
-		authValid := false
-		if a.token != "" && bearerToken == a.token {
-			// Global token matches (backward compatibility)
-			authValid = true
-		} else if bearerToken != "" && agentID != "" {
-			// Try to validate per-agent token
-			agent, err := a.store.GetAgent(r.Context(), agentID)
-			if err == nil && agent.Token != "" && bearerToken == agent.Token {
-				authValid = true
-			}
-		}
-
-		// If auth is required and not valid, reject
-		if (a.token != "" || bearerToken != "") && !authValid {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error":   "unauthorized",
-				"message": "invalid or missing bearer token",
-			})
-			return
-		}
-
-		// Inject agent ID into context for downstream use.
-		ctx := r.Context()
-		if agentID != "" {
-			ctx = context.WithValue(ctx, ctxKeyAgentID, agentID)
-		}
-
-		// Extract session context headers.
-		sc := model.SessionContext{
-			SessionKey:    r.Header.Get("X-Session-Key"),
-			SessionID:     r.Header.Get("X-Session-ID"),
-			Channel:       r.Header.Get("X-Channel"),
-			SenderID:      r.Header.Get("X-Sender-ID"),
-			SenderIsOwner: r.Header.Get("X-Sender-Is-Owner") == "true",
-			Sandboxed:     r.Header.Get("X-Sandboxed") == "true",
-		}
-		ctx = context.WithValue(ctx, ctxKeySession, sc)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-// sessionFromCtx extracts the SessionContext from the request context.
-func sessionFromCtx(ctx context.Context) model.SessionContext {
-	sc, _ := ctx.Value(ctxKeySession).(model.SessionContext)
-	return sc
 }

@@ -15,7 +15,7 @@ import (
 func newMockServer(t *testing.T) (*httptest.Server, *mockStore) {
 	t.Helper()
 	ms := newMockStore()
-	h := handlers.New(ms, "", nil)
+	h := handlers.New(ms, nil)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv, ms

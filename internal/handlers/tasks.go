@@ -68,7 +68,7 @@ func (a *API) taskCreate(ctx context.Context, input *taskCreateInput) (*taskOutp
 		Priority:       input.Body.Priority,
 		Tags:           input.Body.Tags,
 		Creator:        input.XAgentID,
-		SessionContext: sessionFromCtx(ctx),
+		SessionContext: model.SessionFromCtx(ctx),
 	}
 	result, err := a.store.CreateTask(ctx, t)
 	if err != nil {
@@ -113,7 +113,7 @@ func (a *API) taskUpdate(ctx context.Context, input *taskUpdateInput) (*taskOutp
 		Assignee:       input.Body.Assignee,
 		Note:           input.Body.Note,
 		AgentID:        input.XAgentID,
-		SessionContext: sessionFromCtx(ctx),
+		SessionContext: model.SessionFromCtx(ctx),
 	}
 	result, err := a.store.UpdateTask(ctx, input.ID, upd)
 	if errors.Is(err, model.ErrNotFound) {

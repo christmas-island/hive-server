@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -26,7 +25,6 @@ type Store interface {
 	ListMemory(ctx context.Context, f model.MemoryFilter) ([]*model.MemoryEntry, error)
 	ListTasks(ctx context.Context, f model.TaskFilter) ([]*model.Task, error)
 	ListAgents(ctx context.Context) ([]*model.Agent, error)
-	GetAgent(ctx context.Context, id string) (*model.Agent, error)
 	ListClaims(ctx context.Context, f model.ClaimFilter) ([]*model.Claim, error)
 	ListTodos(ctx context.Context, f model.TodoFilter) ([]*model.Todo, error)
 	ListCapturedSessions(ctx context.Context, f model.SessionFilter) ([]*model.CapturedSession, error)
@@ -35,15 +33,13 @@ type Store interface {
 // UI holds the UI dependencies
 type UI struct {
 	store Store
-	token string
 	pages map[string]*template.Template
 }
 
 // New creates a new UI handler
-func New(store Store, token string) *UI {
+func New(store Store) *UI {
 	ui := &UI{
 		store: store,
-		token: token,
 		pages: make(map[string]*template.Template),
 	}
 
@@ -82,7 +78,6 @@ func (ui *UI) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
-	r.Use(ui.authMiddleware)
 
 	// Static files
 	r.Handle("/static/*", http.FileServer(http.FS(staticFS)))
@@ -109,46 +104,6 @@ func (ui *UI) render(w http.ResponseWriter, page string, data interface{}) {
 	if err := tmpl.ExecuteTemplate(w, page, data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 	}
-}
-
-// authMiddleware validates the Bearer token (same logic as API handlers)
-func (ui *UI) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get the bearer token from Authorization header
-		authHeader := r.Header.Get("Authorization")
-		bearerToken := ""
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			bearerToken = authHeader[7:]
-		}
-
-		agentID := r.Header.Get("X-Agent-ID")
-
-		// Check auth: either global token or per-agent token
-		authValid := false
-		if ui.token != "" && bearerToken == ui.token {
-			// Global token matches (backward compatibility)
-			authValid = true
-		} else if bearerToken != "" && agentID != "" {
-			// Try to validate per-agent token
-			agent, err := ui.store.GetAgent(r.Context(), agentID)
-			if err == nil && agent.Token != "" && bearerToken == agent.Token {
-				authValid = true
-			}
-		}
-
-		// If auth is required and not valid, reject
-		if (ui.token != "" || bearerToken != "") && !authValid {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error":   "unauthorized",
-				"message": "invalid or missing bearer token",
-			})
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 // dashboard shows the overview page
