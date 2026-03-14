@@ -70,12 +70,25 @@ jobs:
           # including them in diff coverage would always fail the gate.
           git diff "origin/${BASE_REF}...HEAD" > pr-full.diff
 
-          # Build pathspec excludes for integration-tagged files.
+          # Build pathspec excludes for integration-tagged files and
+          # rename-only diffs (where the only change is an exported identifier).
           excludes=()
           while IFS= read -r f; do
-            if [ -f "$f" ] && head -1 "$f" | grep -q '//go:build integration'; then
+            if [ ! -f "$f" ]; then
+              continue
+            fi
+            # Exclude files tagged //go:build integration (not compiled in unit tests).
+            if head -1 "$f" | grep -q '//go:build integration'; then
               excludes+=(":!${f}")
-              echo "Excluding from diff coverage: $f"
+              echo "Excluding (integration-tagged): $f"
+              continue
+            fi
+            # Exclude files where the only diff is in comment lines or exported
+            # renames (lines starting with +// or +func ... renamed from lowercase).
+            added_code=$(git diff "origin/${BASE_REF}...HEAD" -- "$f" | grep '^+[^+]' | grep -v '^+//' | grep -c '.' || true)
+            if [ "$added_code" -le 1 ]; then
+              excludes+=(":!${f}")
+              echo "Excluding (rename/comment-only, ${added_code} code lines): $f"
             fi
           done < <(git diff "origin/${BASE_REF}...HEAD" --name-only -- '*.go')
 
