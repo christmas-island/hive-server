@@ -11,6 +11,10 @@ import (
 	"github.com/christmas-island/hive-server/internal/store"
 )
 
+// Deprecated: NewCockroachStore is superseded by pkg/testharness.NewTestServer,
+// which uses testcontainers-go for container lifecycle management.
+// Existing tests still use this helper; new tests should prefer the harness.
+//
 // NewCockroachStore starts an ephemeral CockroachDB single-node cluster
 // and returns a connected *store.Store. The cluster is stopped when the
 // test completes via t.Cleanup.

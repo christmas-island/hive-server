@@ -86,9 +86,9 @@ func runTodoPrune(ctx context.Context, tp todoPruner) {
 	}
 }
 
-// buildMux creates the top-level HTTP mux with health probes, version endpoint,
+// BuildMux creates the top-level HTTP mux with health probes, version endpoint,
 // the API handler, and the GitHub webhook endpoint.
-func buildMux(st *store.Store, token string, rc *relay.Client, webhookSecret string) http.Handler {
+func BuildMux(st *store.Store, token string, rc *relay.Client, webhookSecret string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /ready", handleReady)
@@ -142,7 +142,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Build top-level mux: health probes bypass auth, everything else goes to
 	// the API handler (which owns auth middleware and Huma routing).
-	handler := buildMux(s.store, s.config.Token, rc, s.config.GitHubWebhookSecret)
+	handler := BuildMux(s.store, s.config.Token, rc, s.config.GitHubWebhookSecret)
 
 	s.srv = &http.Server{
 		Addr:         s.config.BindAddr,
